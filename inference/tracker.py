@@ -10,7 +10,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import sys
 import logging
+import datetime
 import os.path as osp
 
 import numpy as np
@@ -54,6 +56,7 @@ class Tracker(object):
 
     # Feed in the first frame image to set initial state.
     bbox_feed = [bbox.y, bbox.x, bbox.height, bbox.width]
+    print("init_frame: {}".format(first_bbox))
     input_feed = [frames[0], bbox_feed]
     frame2crop_scale = self.siamese_model.initialize(sess, input_feed)
 
@@ -77,7 +80,12 @@ class Tracker(object):
                      current_target_state.bbox.height, current_target_state.bbox.width]
         input_feed = [filename, bbox_feed]
 
+        dt1 = datetime.datetime.now()
+        print("init current bbox: {}".format(current_target_state.bbox))
         outputs, metadata = self.siamese_model.inference_step(sess, input_feed)
+        dt2 = datetime.datetime.now()
+        print(dt2.timestamp() - dt1.timestamp())
+
         search_scale_list = outputs['scale_xs']
         response = outputs['response']
         response_size = response.shape[1]
@@ -93,7 +101,10 @@ class Tracker(object):
         else:
           best_scale = 0
 
+        print(response.shape)
+
         response = response[best_scale]
+
 
         with np.errstate(all='raise'):  # Raise error if something goes wrong
           response = response - np.min(response)
@@ -138,6 +149,7 @@ class Tracker(object):
         target_scale = np.maximum(0.2, np.minimum(5.0, target_scale))
 
         # Some book keeping
+        print("target_scale: {}".format(target_scale))
         height = original_target_height * target_scale
         width = original_target_width * target_scale
         current_target_state.bbox = Rectangle(x, y, width, height)
@@ -149,8 +161,9 @@ class Tracker(object):
         assert 0 <= current_target_state.search_pos[1] < self.x_image_size, \
           'target position in feature space should be no larger than input image size'
 
+        print("updated current bbox: {}".format(current_target_state.bbox))
+
         if self.log_level > 0:
-          np.save(osp.join(logdir, 'num_frames.npy'), [i + 1])
 
           # Select the image with the highest score scale and convert it to uint8
           image_cropped = outputs['image_cropped'][best_scale].astype(np.uint8)
@@ -160,17 +173,26 @@ class Tracker(object):
           imwrite(osp.join(logdir, 'image_cropped{}.jpg'.format(i)),
                   cv2.cvtColor(image_cropped, cv2.COLOR_RGB2BGR))
 
-          np.save(osp.join(logdir, 'best_scale{}.npy'.format(i)), [best_scale])
-          np.save(osp.join(logdir, 'response{}.npy'.format(i)), response)
-
           y_search, x_search = current_target_state.search_pos
           search_scale = search_scale_list[best_scale]
+          print("search_scale: {}".format(search_scale))
           target_height_search = height * search_scale
           target_width_search = width * search_scale
           bbox_search = Rectangle(x_search, y_search, target_width_search, target_height_search)
           bbox_search = convert_bbox_format(bbox_search, 'top-left-based')
           np.save(osp.join(logdir, 'bbox{}.npy'.format(i)),
                   [bbox_search.x, bbox_search.y, bbox_search.width, bbox_search.height])
+          print("bbox_search: {}".format(bbox_search))
+
+          raw_img = cv2.imread(filename)
+          bbox_search = convert_bbox_format(current_target_state.bbox, 'top-left-based')
+          raw_img = cv2.rectangle(raw_img,(int(bbox_search.x), int(bbox_search.y)),(int(bbox_search.x+bbox_search.width), int(bbox_search.y+bbox_search.height)),(0,255,0),2)
+
+          cv2.imshow('raw_image', raw_img)
+          cv2.imshow('cropped_image',cv2.cvtColor(image_cropped, cv2.COLOR_RGB2BGR))
+          k = cv2.waitKey(0)
+          if k == 27:         # wait for ESC key to exit
+            sys.exit()
 
       reported_bbox = convert_bbox_format(current_target_state.bbox, 'top-left-based')
       reported_bboxs.append(reported_bbox)
