@@ -110,14 +110,16 @@ class InferenceWrapper():
     search_factors = [track_config['scale_step'] ** x for x in scales]
 
     frame_sz = tf.shape(self.image)
+    print("frame_sz: {}".format(frame_sz))
+    print("self.target_bbox_feed: {}".format(self.target_bbox_feed))
     target_yx = self.target_bbox_feed[0:2]
     target_size = self.target_bbox_feed[2:4]
     avg_chan = tf.reduce_mean(self.image, axis=(0, 1), name='avg_chan')
 
     # Compute base values
     base_z_size = target_size
-    base_z_context_size = base_z_size + context_amount * tf.reduce_sum(base_z_size)
-    base_s_z = tf.sqrt(tf.reduce_prod(base_z_context_size))  # Canonical size
+    self.base_z_context_size = base_z_size + context_amount * tf.reduce_sum(base_z_size)
+    base_s_z = tf.sqrt(tf.reduce_prod(self.base_z_context_size))  # Canonical size
     base_scale_z = tf.div(tf.to_float(size_z), base_s_z)
     d_search = (size_x - size_z) / 2.0
     base_pad = tf.div(d_search, base_scale_z)
@@ -205,6 +207,7 @@ class InferenceWrapper():
                              initializer=tf.constant_initializer(0.0, dtype=tf.float32),
                              trainable=False)
       response = self.model_config['adjust_response_config']['scale'] * output + bias
+      print("adjust_response_config: {}".format(self.model_config['adjust_response_config']['scale']))
       self.response = response
 
   def build_upsample(self):
@@ -223,12 +226,16 @@ class InferenceWrapper():
                                            align_corners=True)
       response_up = tf.squeeze(response_up, [3])
       self.response_up = response_up
+      print("self.response_up: {}".format(self.response_up))
 
   def initialize(self, sess, input_feed):
     image_path, target_bbox = input_feed
-    scale_xs, _ = sess.run([self.scale_xs, self.init],
+    target_bbox_feed, base_z_context_size, scale_xs, _ = sess.run([self.target_bbox_feed, self.base_z_context_size, self.scale_xs, self.init],
                            feed_dict={'filename:0': image_path,
                                       "target_bbox_feed:0": target_bbox, })
+
+    print("target_bbox_feed: {}".format(target_bbox_feed))
+    print("base_z_context_size: {}".format(base_z_context_size))
     return scale_xs
 
   def inference_step(self, sess, input_feed):
