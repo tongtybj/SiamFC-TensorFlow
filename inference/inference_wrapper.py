@@ -49,6 +49,7 @@ class InferenceWrapper():
     # Filter out State variables
     variables_to_restore_filterd = {}
     for key, value in variables_to_restore.items():
+      print ("{}: {}".format(key, value))
       if key.split('/')[1] != 'State':
         variables_to_restore_filterd[key] = value
 
@@ -99,6 +100,8 @@ class InferenceWrapper():
 
     size_z = model_config['z_image_size']
     size_x = track_config['x_image_size']
+    print("size_z: {}".format(size_z))
+    print("size_x: {}".format(size_x))
     context_amount = 0.5
 
     num_scales = track_config['num_scales']
@@ -168,6 +171,7 @@ class InferenceWrapper():
     # Exemplar image lies at the center of the search image in the first frame
     exemplar_images = get_exemplar_images(self.search_images, [model_config['z_image_size'],
                                                                model_config['z_image_size']])
+    print("exemplar_images: {}".format(exemplar_images))
     templates = self.get_image_embedding(exemplar_images)
     center_scale = int(get_center(track_config['num_scales']))
     center_template = tf.identity(templates[center_scale])
