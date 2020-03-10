@@ -34,7 +34,8 @@ ex = Experiment()
 @ex.config
 def configs():
   checkpoint = 'Logs/SiamFC/track_model_checkpoints/SiamFC-3s-color-pretrained'
-  input_files = 'assets/KiteSurf'
+  #input_files = 'assets/KiteSurf'
+  input_files = 'assets/drone'
 
 
 @ex.automain
