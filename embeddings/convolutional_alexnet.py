@@ -43,6 +43,7 @@ def convolutional_alexnet_arg_scope(embed_config,
   is_model_training = trainable and is_training
 
   if get(embed_config, 'use_bn', True):
+    print("========= use bn")
     batch_norm_scale = get(embed_config, 'bn_scale', True)
     batch_norm_decay = 1 - get(embed_config, 'bn_momentum', 3e-4)
     batch_norm_epsilon = get(embed_config, 'bn_epsilon', 1e-6)
@@ -67,6 +68,7 @@ def convolutional_alexnet_arg_scope(embed_config,
   else:
     batch_norm_params = {}
     normalizer_fn = None
+    print("========= not use bn")
 
   weight_decay = get(embed_config, 'weight_decay', 5e-4)
   if trainable:
@@ -119,6 +121,7 @@ def convolutional_alexnet(inputs, reuse=None, scope='convolutional_alexnet'):
       with tf.variable_scope('conv2'):
         b1, b2 = tf.split(net, 2, 3)
         b1 = slim.conv2d(b1, 128, [5, 5], scope='b1')
+        # https://qiita.com/carushi@github/items/15175cd238f115a51f61
         # The original implementation has bias terms for all convolution, but
         # it actually isn't necessary if the convolution layer is followed by a batch
         # normalization layer since batch norm will subtract the mean.

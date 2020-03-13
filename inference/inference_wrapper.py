@@ -65,6 +65,10 @@ class InferenceWrapper():
       saver.restore(sess, checkpoint_path)
       logging.info("Successfully loaded checkpoint: %s", os.path.basename(checkpoint_path))
 
+      # save the convolutional alexnet model only
+      #tf.train.write_graph(sess.graph.as_graph_def(), './', 'tensorflowModel.pbtx', as_text=True)
+      # saver.save(sess,'./model/trained_model.ckpt')
+
     return _restore_fn
 
   def build_model(self, model_config, track_config):
@@ -162,7 +166,9 @@ class InferenceWrapper():
       with slim.arg_scope(arg_scope):
         return convolutional_alexnet(images, reuse=reuse)
 
-    embed, _ = embedding_fn(images, reuse)
+    embed, end_points = embedding_fn(images, reuse)
+    for k,v in end_points.items():
+      print(k,v)
 
     return embed
 
@@ -193,9 +199,10 @@ class InferenceWrapper():
     self.embeds = self.get_image_embedding(self.search_images, reuse=True)
     with tf.variable_scope('detection'):
       def _translation_match(x, z):
-        x = tf.expand_dims(x, 0)  # [batch, in_height, in_width, in_channels]
-        z = tf.expand_dims(z, -1)  # [filter_height, filter_width, in_channels, out_channels]
-        return tf.nn.conv2d(x, z, strides=[1, 1, 1, 1], padding='VALID', name='translation_match')
+        with tf.variable_scope('cross-corelation'):
+          x = tf.expand_dims(x, 0)  # [batch, in_height, in_width, in_channels]
+          z = tf.expand_dims(z, -1)  # [filter_height, filter_width, in_channels, out_channels]
+          return tf.nn.conv2d(x, z, strides=[1, 1, 1, 1], padding='VALID', name='translation_match')
 
       output = tf.map_fn(
         lambda x: _translation_match(x[0], x[1]),
@@ -230,6 +237,9 @@ class InferenceWrapper():
 
   def initialize(self, sess, input_feed):
     image_path, target_bbox = input_feed
+    #for op in sess.graph.get_operations():
+    #  print("---- {}".format(op.name))
+
     target_bbox_feed, base_z_context_size, scale_xs, _ = sess.run([self.target_bbox_feed, self.base_z_context_size, self.scale_xs, self.init],
                            feed_dict={'filename:0': image_path,
                                       "target_bbox_feed:0": target_bbox, })
