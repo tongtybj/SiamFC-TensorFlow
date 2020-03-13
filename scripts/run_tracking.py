@@ -66,6 +66,12 @@ def main(checkpoint, input_files):
   with tf.Session(graph=g, config=sess_config) as sess:
     restore_fn(sess)
 
+    # test with the direct model
+    #checkpoint_path = tf.train.latest_checkpoint('./model')
+    #saver = tf.train.import_meta_graph('./model/trained_model.ckpt.meta', import_scope="test/convolutional_alexnet")
+    #saver.restore(sess, checkpoint_path)
+    writer = tf.summary.FileWriter(logdir="./graph/", graph=sess.graph)
+
     tracker = Tracker(model, model_config=model_config, track_config=track_config)
 
     for video_dir in video_dirs:
