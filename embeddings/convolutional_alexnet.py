@@ -43,7 +43,7 @@ def convolutional_alexnet_arg_scope(embed_config,
   is_model_training = trainable and is_training
 
   if get(embed_config, 'use_bn', True):
-    print("========= use bn")
+    #print("========= use bn")
     batch_norm_scale = get(embed_config, 'bn_scale', True)
     batch_norm_decay = 1 - get(embed_config, 'bn_momentum', 3e-4)
     batch_norm_epsilon = get(embed_config, 'bn_epsilon', 1e-6)
