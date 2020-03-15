@@ -51,7 +51,7 @@ def get_exemplar_images(images, exemplar_size, targets_pos=None):
 
     if targets_pos is None:
       target_pos_single = [[get_center(x_height), get_center(x_width)]]
-      targets_pos_ = tf.tile(target_pos_single, [batch_size, 1])
+      targets_pos_ = tf.tile(target_pos_single, [batch_size, 1], name="tilt_image_center")
     else:
       targets_pos_ = targets_pos
 

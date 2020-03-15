@@ -44,7 +44,7 @@ class Tracker(object):
     logging.info('track num scales -- {}'.format(self.num_scales))
     scales = np.arange(self.num_scales) - get_center(self.num_scales)
     self.search_factors = [self.track_config['scale_step'] ** x for x in scales]
-
+    logging.info('track search_factors -- {}'.format(self.search_factors))
     self.x_image_size = track_config['x_image_size']  # Search image size
     self.window = None  # Cosine window
     self.log_level = track_config['log_level']
@@ -57,6 +57,7 @@ class Tracker(object):
     # Feed in the first frame image to set initial state.
     bbox_feed = [bbox.y, bbox.x, bbox.height, bbox.width]
     print("init_frame: {}".format(first_bbox))
+    print("init_frame2: {}".format(bbox_feed))
     input_feed = [frames[0], bbox_feed]
     frame2crop_scale = self.siamese_model.initialize(sess, input_feed)
 
@@ -65,6 +66,7 @@ class Tracker(object):
     original_target_width = bbox.width
     search_center = np.array([get_center(self.x_image_size),
                               get_center(self.x_image_size)])
+
     current_target_state = TargetState(bbox=bbox,
                                        search_pos=search_center,
                                        scale_idx=int(get_center(self.num_scales)))
@@ -72,17 +74,24 @@ class Tracker(object):
     include_first = get(self.track_config, 'include_first', False)
     logging.info('Tracking include first -- {}'.format(include_first))
 
+    raw_img = cv2.imread(frames[0])
+    raw_img = cv2.rectangle(raw_img,(int(first_bbox.x), int(first_bbox.y)),(int(first_bbox.x+first_bbox.width), int(first_bbox.y+first_bbox.height)),(255,0,0),2)
+    cv2.imshow('raw_image', raw_img)
+    k = cv2.waitKey(0)
+
+
     # Run tracking loop
     reported_bboxs = []
     for i, filename in enumerate(frames):
+      print("current bbox: {}".format(current_target_state.bbox))
       if i > 0 or include_first:  # We don't really want to process the first image unless intended to do so.
         bbox_feed = [current_target_state.bbox.y, current_target_state.bbox.x,
                      current_target_state.bbox.height, current_target_state.bbox.width]
         input_feed = [filename, bbox_feed]
 
         dt1 = datetime.datetime.now()
-        print("init current bbox: {}".format(current_target_state.bbox))
         outputs, metadata = self.siamese_model.inference_step(sess, input_feed)
+        print("current bbox2: {}".format(current_target_state.bbox))
         dt2 = datetime.datetime.now()
         print(dt2.timestamp() - dt1.timestamp())
 
@@ -130,6 +139,7 @@ class Tracker(object):
         disp_instance_feat = disp_instance_final / upsample_factor
         # ... Avoid empty position ...
         r_radius = int(response_size / upsample_factor / 2)
+        print("r_radius: {}".format(r_radius))
         disp_instance_feat = np.maximum(np.minimum(disp_instance_feat, r_radius), -r_radius)
         # ... in instance input ...
         disp_instance_input = disp_instance_feat * self.model_config['embed_config']['stride']
