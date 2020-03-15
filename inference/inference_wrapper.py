@@ -49,10 +49,11 @@ class InferenceWrapper():
     # Filter out State variables
     variables_to_restore_filterd = {}
     for key, value in variables_to_restore.items():
-      print ("{}: {}".format(key, value))
+      print ("///////variables_to_restore {}: {}".format(key, value))
       if key.split('/')[1] != 'State':
         variables_to_restore_filterd[key] = value
 
+    print ("//// {}".format(len(variables_to_restore_filterd)))
     saver = tf.train.Saver(variables_to_restore_filterd)
 
     if osp.isdir(checkpoint_path):
@@ -64,6 +65,12 @@ class InferenceWrapper():
       logging.info("Loading model from checkpoint: %s", checkpoint_path)
       saver.restore(sess, checkpoint_path)
       logging.info("Successfully loaded checkpoint: %s", os.path.basename(checkpoint_path))
+
+      vars = tf.global_variables()
+      for var in vars:
+        #print (var.name)
+        if "convolutional_alexnet/conv1/weights" in var.name:
+          print(sess.run(var))
 
       # save the convolutional alexnet model only
       #tf.train.write_graph(sess.graph.as_graph_def(), './', 'tensorflowModel.pbtx', as_text=True)

@@ -5,7 +5,7 @@
 #
 # Distributed under terms of the MIT license.
 
-r"""Generate tracking results for videos using Siamese Model"""
+"""Generate tracking results for videos using Siamese Model"""
 
 from __future__ import absolute_import
 from __future__ import division
