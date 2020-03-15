@@ -49,11 +49,11 @@ class InferenceWrapper():
     # Filter out State variables
     variables_to_restore_filterd = {}
     for key, value in variables_to_restore.items():
-      print ("///////variables_to_restore {}: {}".format(key, value))
+      #print ("///////variables_to_restore {}: {}".format(key, value))
       if key.split('/')[1] != 'State':
         variables_to_restore_filterd[key] = value
 
-    print ("//// {}".format(len(variables_to_restore_filterd)))
+    #print ("//// {}".format(len(variables_to_restore_filterd)))
     saver = tf.train.Saver(variables_to_restore_filterd)
 
     if osp.isdir(checkpoint_path):
@@ -67,10 +67,12 @@ class InferenceWrapper():
       logging.info("Successfully loaded checkpoint: %s", os.path.basename(checkpoint_path))
 
       vars = tf.global_variables()
+      '''
       for var in vars:
-        #print (var.name)
+        print (var.name)
         if "convolutional_alexnet/conv1/weights" in var.name:
           print(sess.run(var))
+      '''
 
       # save the convolutional alexnet model only
       #tf.train.write_graph(sess.graph.as_graph_def(), './', 'tensorflowModel.pbtx', as_text=True)
@@ -93,7 +95,7 @@ class InferenceWrapper():
     filename = tf.placeholder(tf.string, [], name='filename')
     image_file = tf.read_file(filename)
     image = tf.image.decode_jpeg(image_file, channels=3, dct_method="INTEGER_ACCURATE")
-    image = tf.to_float(image)
+    image = tf.to_float(image, name="image_to_float")
     self.image = image
     self.target_bbox_feed = tf.placeholder(dtype=tf.float32,
                                            shape=[4],
@@ -111,8 +113,6 @@ class InferenceWrapper():
 
     size_z = model_config['z_image_size']
     size_x = track_config['x_image_size']
-    print("size_z: {}".format(size_z))
-    print("size_x: {}".format(size_x))
     context_amount = 0.5
 
     num_scales = track_config['num_scales']
@@ -121,20 +121,19 @@ class InferenceWrapper():
     search_factors = [track_config['scale_step'] ** x for x in scales]
 
     frame_sz = tf.shape(self.image)
-    print("frame_sz: {}".format(frame_sz))
-    print("self.target_bbox_feed: {}".format(self.target_bbox_feed))
-    target_yx = self.target_bbox_feed[0:2]
-    target_size = self.target_bbox_feed[2:4]
+    #target_yx = self.target_bbox_feed[0:2]
+    target_yx = tf.strided_slice(self.target_bbox_feed, [0], [2], name="target_bbox_yx")
+    #target_size = self.target_bbox_feed[2:4]
+    target_size = tf.strided_slice(self.target_bbox_feed, [2], [4], name="target_bbox_size")
     avg_chan = tf.reduce_mean(self.image, axis=(0, 1), name='avg_chan')
 
     # Compute base values
-    base_z_size = target_size
-    self.base_z_context_size = base_z_size + context_amount * tf.reduce_sum(base_z_size)
-    base_s_z = tf.sqrt(tf.reduce_prod(self.base_z_context_size))  # Canonical size
-    base_scale_z = tf.div(tf.to_float(size_z), base_s_z)
+    self.base_z_context_size = target_size + context_amount * tf.reduce_sum(target_size, name="target_z_size_sum")
+    canonical_size = tf.sqrt(tf.reduce_prod(self.base_z_context_size))  # Canonical size
+    base_scale_z = tf.div(tf.to_float(size_z), canonical_size)
     d_search = (size_x - size_z) / 2.0
     base_pad = tf.div(d_search, base_scale_z)
-    base_s_x = base_s_z + 2 * base_pad
+    base_s_x = canonical_size + 2 * base_pad
     base_scale_x = tf.div(tf.to_float(size_x), base_s_x)
 
     boxes = []
@@ -145,7 +144,7 @@ class InferenceWrapper():
       bottomright = tf.div(target_yx + get_center(s_x), frame_sz_1)
       box = tf.concat([topleft, bottomright], axis=0)
       boxes.append(box)
-    boxes = tf.stack(boxes)
+      self.boxes = tf.stack(boxes)
 
     scale_xs = []
     for factor in search_factors:
@@ -157,7 +156,7 @@ class InferenceWrapper():
     # while the original implementation uses only the average value
     # of the first image for all images.
     image_minus_avg = tf.expand_dims(self.image - avg_chan, 0)
-    image_cropped = tf.image.crop_and_resize(image_minus_avg, boxes,
+    image_cropped = tf.image.crop_and_resize(image_minus_avg, self.boxes,
                                              box_ind=tf.zeros((track_config['num_scales']), tf.int32),
                                              crop_size=[size_x, size_x])
     self.search_images = image_cropped + avg_chan
@@ -186,11 +185,11 @@ class InferenceWrapper():
     # Exemplar image lies at the center of the search image in the first frame
     exemplar_images = get_exemplar_images(self.search_images, [model_config['z_image_size'],
                                                                model_config['z_image_size']])
-    print("exemplar_images: {}".format(exemplar_images))
+
     templates = self.get_image_embedding(exemplar_images)
     center_scale = int(get_center(track_config['num_scales']))
     center_template = tf.identity(templates[center_scale])
-    templates = tf.stack([center_template for _ in range(track_config['num_scales'])])
+    templates = tf.stack([center_template for _ in range(track_config['num_scales'])], name="same_template")
 
     with tf.variable_scope('target_template'):
       # Store template in Variable such that we don't have to feed this template every time.
@@ -244,15 +243,14 @@ class InferenceWrapper():
 
   def initialize(self, sess, input_feed):
     image_path, target_bbox = input_feed
-    #for op in sess.graph.get_operations():
-    #  print("---- {}".format(op.name))
 
-    target_bbox_feed, base_z_context_size, scale_xs, _ = sess.run([self.target_bbox_feed, self.base_z_context_size, self.scale_xs, self.init],
+    target_bbox_feed, base_z_context_size, scale_xs, boxes, _ = sess.run([self.target_bbox_feed, self.base_z_context_size, self.scale_xs, self.boxes, self.init],
                            feed_dict={'filename:0': image_path,
                                       "target_bbox_feed:0": target_bbox, })
 
     print("target_bbox_feed: {}".format(target_bbox_feed))
     print("base_z_context_size: {}".format(base_z_context_size))
+    print("self.boxes: {}".format(boxes))
     return scale_xs
 
   def inference_step(self, sess, input_feed):
