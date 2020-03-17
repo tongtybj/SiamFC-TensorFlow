@@ -163,3 +163,14 @@ python tracker_benchmark/draw_graph.py
 
 ## License
 SiamFC-TensorFlow is released under the MIT License (refer to the LICENSE file for details).
+
+## Usage
+- export frozen graph (no scale tracking)
+  ```
+  $ python scripts/export_siamese_fc_model.py
+  ```
+
+- tracking from frozen graph
+  ```
+  $ python scripts/tracking_from_frozen_graph.py
+  ```
