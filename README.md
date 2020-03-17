@@ -174,3 +174,13 @@ SiamFC-TensorFlow is released under the MIT License (refer to the LICENSE file f
   ```
   $ python scripts/tracking_from_frozen_graph.py
   ```
+
+- tracking using tflite model
+  ```
+  $ python scripts/tracking_from_frozen_graph.py --model=inference_model/converted_model.tflite --lite=True
+  ```
+
+- trackign using weight-only quantization model
+  ```
+  $ python scripts/tracking_from_frozen_graph.py --model=inference_model/converted_model_weight_quant.tflite --lite=True
+  ```

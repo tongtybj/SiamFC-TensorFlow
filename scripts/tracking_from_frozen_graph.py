@@ -49,24 +49,33 @@ class TargetState(object):
     #self.scale_idx = scale_idx  # scale index in the searched scales
 
 class SiameseTracking():
-    def __init__(self, model_filepath, config_filepath, init_bb):
+    def __init__(self, model_filepath, config_filepath, lite, init_bb):
 
-        print('Loading frozen graphmodel...')
-        self.graph = tf.Graph()
+        self.lite = lite
+        if self.lite == True:
+            self.interpreter = tf.lite.Interpreter(model_path=model_filepath)
+            self.interpreter.allocate_tensors()
+            self.lite_input_details = self.interpreter.get_input_details()
+            print(self.lite_input_details)
+            self.lite_output_details = self.interpreter.get_output_details()
+            print(self.lite_output_details)
+        else:
+            print('Loading frozen graphmodel...')
+            self.graph = tf.Graph()
 
-        with tf.gfile.GFile(model_filepath, 'rb') as f:
-            graph_def = tf.GraphDef()
-            graph_def.ParseFromString(f.read())
+            with tf.gfile.GFile(model_filepath, 'rb') as f:
+                graph_def = tf.GraphDef()
+                graph_def.ParseFromString(f.read())
 
-        for n in graph_def.node:
-            if n.op in ('Placeholder'):
-                print("placeholder: {}".format(n.name))
+                for n in graph_def.node:
+                    if n.op in ('Placeholder'):
+                        print("placeholder: {}".format(n.name))
 
-        with self.graph.as_default():
-            tf.import_graph_def(graph_def)
-        self.graph.finalize()
+            with self.graph.as_default():
+                tf.import_graph_def(graph_def)
+                self.graph.finalize()
 
-        self.sess = tf.Session(graph = self.graph)
+            self.sess = tf.Session(graph = self.graph)
 
         with open(osp.join(config_filepath, 'model_config.json'), 'r') as f:
             self.model_config = json.load(f)
@@ -104,7 +113,6 @@ class SiameseTracking():
         self.current_target_state = TargetState(bbox=bbox, search_pos=self.search_center)
 
         return template_image.astype(np.float32)
-
 
     def crop_search_image(self, input_image, target_bbox):
         target_yx = np.array([target_bbox.y, target_bbox.x])
@@ -152,12 +160,19 @@ class SiameseTracking():
         #outputs = {'search_image': search_image}
         #retrun
 
-        output_tensor = self.graph.get_tensor_by_name("import/upsample/final_result:0")
-        response = self.sess.run(output_tensor, feed_dict = {"import/template_image:0": template_image, "import/input_image:0": search_image})
+        response = None
+        if self.lite == True:
+            # https://www.tensorflow.org/lite/guide/inference
+            self.interpreter.set_tensor(self.lite_input_details[0]['index'], template_image)
+            self.interpreter.set_tensor(self.lite_input_details[1]['index'], search_image)
+            self.interpreter.invoke()
+            raw_output_data = self.interpreter.get_tensor(self.lite_output_details[0]['index'])
+            # post-processing for upsampling the result
+            response = cv2.resize(raw_output_data, dsize=None, fx=self.track_config['upsample_factor'], fy=self.track_config['upsample_factor'], interpolation=cv2.INTER_CUBIC)
 
-
-        #outputs = {'search_image': search_image, 'response': response}
-        #return outputs
+        else:
+            output_tensor = self.graph.get_tensor_by_name("import/upsample/final_result:0")
+            response = self.sess.run(output_tensor, feed_dict = {"import/template_image:0": template_image, "import/input_image:0": search_image})
 
         with np.errstate(all='raise'):  # Raise error if something goes wrong
           response = response - np.min(response)
@@ -219,13 +234,16 @@ if __name__ == "__main__":
     parser.add_argument('--images', dest='image_filepath', action="store",
                             help='the path of iamges to do inference', default='assets/drone', type=str)
 
+    parser.add_argument('--lite', dest='lite', action="store",
+                            help='whether use tensorflow lite model', default=False, type=bool)
+
     args, _ = parser.parse_known_args()
 
     first_line = open(args.image_filepath + '/groundtruth_rect.txt').readline()
     bbox = [int(v) for v in first_line.strip().split(',')]
     init_bbox = Rectangle(bbox[0], bbox[1], bbox[2], bbox[3])  # 0-index in python
 
-    tracker = SiameseTracking(args.model_filepath, args.config_filepath, init_bbox)
+    tracker = SiameseTracking(args.model_filepath, args.config_filepath, args.lite, init_bbox)
 
     filenames = sort_nicely(glob(args.image_filepath + '/img/*.jpg'))
 
