@@ -12,7 +12,7 @@ import os
 import os.path as osp
 
 import tensorflow as tf
-#from tensorflow.python.framework import graph_util
+
 
 CURRENT_DIR = osp.dirname(__file__)
 sys.path.append(osp.join(CURRENT_DIR, '..'))
@@ -107,6 +107,27 @@ class ExportInferenceModel():
                 tf.import_graph_def(frozen_graph_def)
                 writer = tf.compat.v1.summary.FileWriter(logdir="./inference_model", graph=frozen_graph)
                 tf.train.write_graph(frozen_graph_def, './inference_model', 'frozen_graph.pb', as_text=False)
+
+                # tensorflow lite
+
+                #for op in frozen_graph.get_operations():
+                #    print(op.name)
+                converter = tf.compat.v1.lite.TFLiteConverter.from_frozen_graph('./inference_model/frozen_graph.pb', ['template_image', 'input_image'], ['detection/add'])
+                #converter = tf.compat.v1.lite.TFLiteConverter.from_frozen_graph('./inference_model/frozen_graph.pb', ['template_image', 'input_image'], ['upsample/final_result'])
+                '''
+                # https://www.tensorflow.org/api_docs/python/tf/compat/v1/lite/TFLiteConverter#from_frozen_graph
+                converter.allow_custom_ops = True
+                '''
+                converter.dump_graphviz_dir = './inference_model'
+                tflite_model = converter.convert()
+                open("./inference_model/converted_model.tflite", "wb").write(tflite_model)
+
+                # quantization: https://arxiv.org/pdf/1712.05877.pdf
+                # only weigh quatization is very slow x5
+                converter.optimizations = [tf.compat.v1.lite.Optimize.DEFAULT]
+                tflite_model = converter.convert()
+                open("./inference_model/converted_model_weight_quant.tflite", "wb").write(tflite_model)
+
 
 if __name__ == '__main__':
     ExportInferenceModel()
