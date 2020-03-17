@@ -105,10 +105,6 @@ class ExportInferenceModel():
             frozen_graph = tf.Graph()
             with frozen_graph.as_default():
                 tf.import_graph_def(frozen_graph_def)
-                #for op in frozen_graph.get_operations():
-                    #if op.name == "import/convolutional_alexnet/conv1/weights":
-                        #print (sess.run(op))
-
                 writer = tf.compat.v1.summary.FileWriter(logdir="./inference_model", graph=frozen_graph)
                 tf.train.write_graph(frozen_graph_def, './inference_model', 'frozen_graph.pb', as_text=False)
 
