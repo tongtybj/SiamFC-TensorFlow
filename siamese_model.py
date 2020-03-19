@@ -134,6 +134,7 @@ class SiameseModel:
                                  self.model_config['embed_config']['stride'],
                                  self.train_config['gt_config'])
 
+    # loss: https://www.renom.jp/ja/notebooks/tutorial/basic_algorithm/lossfunction/notebook.html
     with tf.name_scope('Loss'):
       loss = tf.nn.sigmoid_cross_entropy_with_logits(logits=response,
                                                      labels=gt)
@@ -198,7 +199,7 @@ class SiameseModel:
                                   'convolutional_alexnet/', 'detection/')
 
       def restore_fn(sess):
-        tf.logging.info("Restoring embedding variables from checkpoint file %s",
+        tf.warn.info("Restoring embedding variables from checkpoint file %s",
                         embed_config['embedding_checkpoint_file'])
         sess.run([initialize])
 

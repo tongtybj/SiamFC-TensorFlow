@@ -27,9 +27,8 @@ class Sampler(object):
     for idx in data_idxs:
       yield idx
 
-
 if __name__ == '__main__':
-  x = [1, 2, 3]
+  x = [1, 2, 3, 4, 5, 6]
   sampler = Sampler(x, shuffle=True)
   p = 0
   for xx in sampler:

@@ -5,13 +5,19 @@
 #
 # Distributed under terms of the MIT license.
 
+## bakui memo:
+## 1. data agumentation algorithm
+## 2. data batch algorithm
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
 import logging
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+
+TF_MAJOR_VERSION = [ int(num) for num in tf.__version__.split('.')][0]
 
 from datasets.sampler import Sampler
 from datasets.transforms import Compose, RandomGray, RandomCrop, CenterCrop, RandomStretch
@@ -40,7 +46,7 @@ class DataLoader(object):
     elif preprocess_name == 'siamese_fc_gray':
       self.v_transform = RandomGray()
       self.z_transform = Compose([RandomStretch(),
-                                  CenterCrop((255 - 8, 255 - 8)),
+                                  CenterCrop((255 - 8, 255 - 8)), # embeding stride: 8, robustness: should also be center
                                   RandomCrop(255 - 2 * 8),
                                   CenterCrop((127, 127))])
       self.x_transform = Compose([RandomStretch(),
@@ -86,17 +92,23 @@ class DataLoader(object):
 
       return exemplar_image, instance_image
 
+    # https://qiita.com/S-aiueo32/items/c7e86ef6c339dfb013ba
+    # TODO: except tf.errors.OutOfRangeError: # 末尾まで行ったらループを抜ける
     dataset = tf.data.Dataset.from_generator(sample_generator,
-                                             output_types=(tf.string),
-                                             output_shapes=(tf.TensorShape([2])))
+                                                       output_types=(tf.string),
+                                                       output_shapes=(tf.TensorShape([2])))
+    # prefecth, thread: http://tensorflow.classcat.com/2019/03/23/tf20-alpha-guide-data-performance/
+    # https://www.tensorflow.org/tutorials/load_data/images?hl=ja
     dataset = dataset.map(transform_fn, num_parallel_calls=self.config['prefetch_threads'])
     dataset = dataset.prefetch(self.config['prefetch_capacity'])
     dataset = dataset.repeat()
     dataset = dataset.batch(self.config['batch_size'])
+    print(" ======= batch size: {}".format(self.config['batch_size']))
     self.dataset_tf = dataset
 
   def build_iterator(self):
-    self.iterator = self.dataset_tf.make_one_shot_iterator()
+      self.iterator = self.dataset_tf.make_one_shot_iterator()
+
 
   def get_one_batch(self):
     return self.iterator.get_next()

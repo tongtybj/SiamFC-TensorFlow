@@ -63,7 +63,7 @@ class CenterCrop(object):
 
   def __call__(self, img):
     th, tw = self.size
-    return tf.image.resize_image_with_crop_or_pad(img, th, tw)
+    return tf.compat.v1.image.resize_image_with_crop_or_pad(img, th, tw)
 
 
 class RandomCrop(object):

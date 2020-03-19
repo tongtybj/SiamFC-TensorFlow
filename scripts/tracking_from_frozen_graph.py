@@ -49,9 +49,10 @@ class TargetState(object):
     #self.scale_idx = scale_idx  # scale index in the searched scales
 
 class SiameseTracking():
-    def __init__(self, model_filepath, config_filepath, lite, init_bb):
+    def __init__(self, model_filepath, config_filepath, lite, full_quant, init_bb):
 
         self.lite = lite
+        self.full_quant = full_quant
         if self.lite == True:
             self.interpreter = tf.lite.Interpreter(model_path=model_filepath)
             self.interpreter.allocate_tensors()
@@ -63,8 +64,8 @@ class SiameseTracking():
             print('Loading frozen graphmodel...')
             self.graph = tf.Graph()
 
-            with tf.gfile.GFile(model_filepath, 'rb') as f:
-                graph_def = tf.GraphDef()
+            with tf.compat.v1.gfile.GFile(model_filepath, 'rb') as f:
+                graph_def = tf.compat.v1.GraphDef()
                 graph_def.ParseFromString(f.read())
 
                 for n in graph_def.node:
@@ -75,7 +76,7 @@ class SiameseTracking():
                 tf.import_graph_def(graph_def)
                 self.graph.finalize()
 
-            self.sess = tf.Session(graph = self.graph)
+            self.sess = tf.compat.v1.Session(graph = self.graph)
 
         with open(osp.join(config_filepath, 'model_config.json'), 'r') as f:
             self.model_config = json.load(f)
@@ -112,7 +113,10 @@ class SiameseTracking():
         # Update the current_target_state
         self.current_target_state = TargetState(bbox=bbox, search_pos=self.search_center)
 
-        return template_image.astype(np.float32)
+        if self.full_quant == True:
+            return template_image.astype(np.uint8)
+        else:
+            return template_image.astype(np.float32)
 
     def crop_search_image(self, input_image, target_bbox):
         target_yx = np.array([target_bbox.y, target_bbox.x])
@@ -151,7 +155,11 @@ class SiameseTracking():
         search_image[init_y: bottomright[0] - topleft[0], init_x: bottomright[1] - topleft[1],:] = input_image[topleft[0]:bottomright[0], topleft[1]:bottomright[1],:]
 
         search_image = cv2.resize(search_image, (self.search_image_size, self.search_image_size))
-        return search_image.astype(np.float32), search_resize_rate
+
+        if self.full_quant == True:
+            return search_image.astype(np.uint8), search_resize_rate
+        else:
+            return search_image.astype(np.float32), search_resize_rate
 
     def inference(self, template_image, input_image):
 
@@ -236,6 +244,8 @@ if __name__ == "__main__":
 
     parser.add_argument('--lite', dest='lite', action="store",
                             help='whether use tensorflow lite model', default=False, type=bool)
+    parser.add_argument('--full_quant', dest='full_quant', action="store",
+                            help='full quantization', default=False, type=bool)
 
     args, _ = parser.parse_known_args()
 
@@ -243,7 +253,7 @@ if __name__ == "__main__":
     bbox = [int(v) for v in first_line.strip().split(',')]
     init_bbox = Rectangle(bbox[0], bbox[1], bbox[2], bbox[3])  # 0-index in python
 
-    tracker = SiameseTracking(args.model_filepath, args.config_filepath, args.lite, init_bbox)
+    tracker = SiameseTracking(args.model_filepath, args.config_filepath, args.lite, args.full_quant, init_bbox)
 
     filenames = sort_nicely(glob(args.image_filepath + '/img/*.jpg'))
 

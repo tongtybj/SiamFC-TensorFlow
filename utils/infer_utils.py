@@ -129,6 +129,7 @@ def get_subwindow_avg(im, pos, model_sz, original_sz):
   context_xmax = context_xmax + left_pad
   context_ymin = context_ymin + top_pad
   context_ymax = context_ymax + top_pad
+  # important !!!!
   if top_pad > 0 or bottom_pad > 0 or left_pad > 0 or right_pad > 0:
     R = np.pad(im[:, :, 0], ((top_pad, bottom_pad), (left_pad, right_pad)),
                'constant', constant_values=(avg_chans[0]))
