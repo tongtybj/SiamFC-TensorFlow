@@ -11,8 +11,10 @@ import sys
 import os
 import os.path as osp
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
+import numpy as np
+import cv2
 
 CURRENT_DIR = osp.dirname(__file__)
 sys.path.append(osp.join(CURRENT_DIR, '..'))
@@ -20,21 +22,36 @@ sys.path.append(osp.join(CURRENT_DIR, '..'))
 
 from embeddings.convolutional_alexnet import convolutional_alexnet_arg_scope, convolutional_alexnet
 from utils.misc_utils import load_cfgs
+from datasets.dataloader import DataLoader
 
 checkpoint = 'Logs/SiamFC/track_model_checkpoints/SiamFC-3s-color-pretrained'
 input_files = 'assets/KiteSurf'
 
-slim = tf.contrib.slim
+TF_MAJOR_VERSION = [ int(num) for num in tf.__version__.split('.')][0]
+if TF_MAJOR_VERSION == 1:
+    import tensorflow.contrib.slim as slim
+else:
+    import tf_slim as slim
+
+tf.disable_v2_behavior()
 
 class ExportInferenceModel():
     def __init__(self):
-        self.model_config, _, self.track_config = load_cfgs(checkpoint)
+        self.model_config, self.train_config, self.track_config = load_cfgs(checkpoint)
         size_z = self.model_config['z_image_size']
         size_x = self.track_config['x_image_size']
 
+
+        # load dataset for representative data for activation quantization
+        self.train_config['validation_data_config']["batch_size"] = 1
+        self.train_config['validation_data_config']["prefetch_capacity"] = 0 # no need to prefetch
+        print("batch.size: {}".format(self.train_config['validation_data_config'].get("batch_size")))
+        self.dataloader = DataLoader(self.train_config['validation_data_config'], False)
+        self.dataloader.build()
+
         with tf.Session() as sess:
-            template_image = tf.compat.v1.placeholder(tf.float32, shape=[size_z, size_z, 3], name='template_image')
-            input_image = tf.compat.v1.placeholder(tf.float32, shape=[size_x, size_x, 3], name='input_image')
+            template_image = tf.placeholder(tf.float32, shape=[size_z, size_z, 3], name='template_image')
+            input_image = tf.placeholder(tf.float32, shape=[size_x, size_x, 3], name='input_image')
             template_image =tf.expand_dims(template_image, 0)
             input_image =tf.expand_dims(input_image, 0)
             embed_config = self.model_config['embed_config']
@@ -51,16 +68,16 @@ class ExportInferenceModel():
 
 
             # build cross-correlation between features from template image and input image
-            with tf.compat.v1.variable_scope('detection'):
+            with tf.variable_scope('detection'):
                 embed_z = tf.squeeze(embed_z, 0)  # [filter_height, filter_width, in_channels]
                 embed_z = tf.expand_dims(embed_z, -1)  # [filter_height, filter_width, in_channels, out_channels]
                 response = tf.nn.conv2d(embed_x, embed_z, strides=[1, 1, 1, 1], padding='VALID', name="cross_correlation")
                 response = tf.squeeze(response)  # of shape [17, 17]
-                bias = tf.compat.v1.get_variable('biases', [1], dtype=tf.float32, trainable=False)
+                bias = tf.get_variable('biases', [1], dtype=tf.float32, trainable=False)
                 response = self.model_config['adjust_response_config']['scale'] * response + bias
 
             # upsample the result of cross-correlation
-            with tf.compat.v1.variable_scope('upsample'):
+            with tf.variable_scope('upsample'):
                 up_method = self.track_config['upsample_method']
                 methods = {'bilinear': tf.image.ResizeMethod.BILINEAR,
                            'bicubic': tf.image.ResizeMethod.BICUBIC}
@@ -72,7 +89,7 @@ class ExportInferenceModel():
 
             #print("final op: {}".format(response_up.name))
 
-            saver = tf.compat.v1.train.Saver(tf.compat.v1.global_variables())
+            saver = tf.train.Saver(tf.global_variables())
             if osp.isdir(checkpoint):
                 checkpoint_path = tf.train.latest_checkpoint(checkpoint)
                 if not checkpoint:
@@ -100,20 +117,20 @@ class ExportInferenceModel():
             # extract frozed graph
             # http://workpiles.com/2016/07/tensorflow-protobuf-dump/
             # frozen_graph_def = graph_util.convert_variables_to_constants(sess, tf.get_default_graph().as_graph_def(), ["convolutional_alexnet/conv5/concat", "convolutional_alexnet_1/conv5/concat"])
-            frozen_graph_def = tf.compat.v1.graph_util.convert_variables_to_constants(sess, tf.compat.v1.get_default_graph().as_graph_def(), ["upsample/final_result"])
+            frozen_graph_def = tf.graph_util.convert_variables_to_constants(sess, tf.get_default_graph().as_graph_def(), ["upsample/final_result"])
 
             frozen_graph = tf.Graph()
             with frozen_graph.as_default():
                 tf.import_graph_def(frozen_graph_def)
-                writer = tf.compat.v1.summary.FileWriter(logdir="./inference_model", graph=frozen_graph)
+                writer = tf.summary.FileWriter(logdir="./inference_model", graph=frozen_graph)
                 tf.train.write_graph(frozen_graph_def, './inference_model', 'frozen_graph.pb', as_text=False)
 
                 # tensorflow lite
 
                 #for op in frozen_graph.get_operations():
                 #    print(op.name)
-                converter = tf.compat.v1.lite.TFLiteConverter.from_frozen_graph('./inference_model/frozen_graph.pb', ['template_image', 'input_image'], ['detection/add'])
-                #converter = tf.compat.v1.lite.TFLiteConverter.from_frozen_graph('./inference_model/frozen_graph.pb', ['template_image', 'input_image'], ['upsample/final_result'])
+                converter = tf.lite.TFLiteConverter.from_frozen_graph('./inference_model/frozen_graph.pb', ['template_image', 'input_image'], ['detection/add'])
+                #converter = tf.lite.TFLiteConverter.from_frozen_graph('./inference_model/frozen_graph.pb', ['template_image', 'input_image'], ['upsample/final_result'])
                 '''
                 # https://www.tensorflow.org/api_docs/python/tf/compat/v1/lite/TFLiteConverter#from_frozen_graph
                 converter.allow_custom_ops = True
@@ -124,9 +141,29 @@ class ExportInferenceModel():
 
                 # quantization: https://arxiv.org/pdf/1712.05877.pdf
                 # only weigh quatization is very slow x5
-                converter.optimizations = [tf.compat.v1.lite.Optimize.DEFAULT]
+                converter.optimizations = [tf.lite.Optimize.OPTIMIZE_FOR_SIZE]
                 tflite_model = converter.convert()
                 open("./inference_model/converted_model_weight_quant.tflite", "wb").write(tflite_model)
+
+                # fully quantized
+                if TF_MAJOR_VERSION > 1:
+                    #tf.enable_eager_execution()
+                    def representative_data_gen():
+                        for i in range(300):
+                            exemplar_op, instance_op = self.dataloader.get_one_batch()
+                            exemplar, instance = sess.run([exemplar_op, instance_op])
+                            print(i)
+
+                            yield [exemplar[0].astype(np.float32), instance[0].astype(np.float32)]
+
+
+                    converter.representative_dataset = representative_data_gen
+                    converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
+                    converter.inference_input_type = tf.uint8
+                    converter.inference_output_type = tf.uint8
+                    tflite_model = converter.convert()
+                    open("./inference_model/converted_model_full_quant.tflite", "wb").write(tflite_model)
+
 
 
 if __name__ == '__main__':

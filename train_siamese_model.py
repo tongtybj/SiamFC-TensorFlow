@@ -31,6 +31,10 @@ ex = Experiment(configuration.RUN_NAME)
 ex.observers.append(FileStorageObserver.create(osp.join(configuration.LOG_DIR, 'sacred')))
 
 
+### bakui memo:
+### 1. learning rate algorithm
+### 2. optimizer algorithm
+
 @ex.config
 def configurations():
   # Add configurations for current script, for more details please see the documentation of `sacred`.
@@ -112,6 +116,8 @@ def main(model_config, train_config, track_config):
     optimizer = _configure_optimizer(train_config, learning_rate)
     tf.summary.scalar('learning_rate', learning_rate)
 
+    # general way for run train: https://qiita.com/horiem/items/00ec6488b23895cc4fe2
+    # tensorflow 2.1: https://www.tensorflow.org/tutorials/customization/custom_training_walkthrough
     # Set up the training ops
     opt_op = tf.contrib.layers.optimize_loss(
       loss=model.total_loss,
@@ -163,9 +169,10 @@ def main(model_config, train_config, track_config):
     logging.info('Train for {} steps'.format(total_steps))
     for step in range(start_step, total_steps):
       start_time = time.time()
-      _, loss, batch_loss = sess.run([train_op, model.total_loss, model.batch_loss])
+      # no "feed_dict"
+      # has "feed_dict" exmaple (mnist): https://qiita.com/SwitchBlade/items/6677c283b2402d060cd0
+      _, loss, batch_loss, instances, response = sess.run([train_op, model.total_loss, model.batch_loss, model.instances, model.response])
       duration = time.time() - start_time
-
       if step % 10 == 0:
         examples_per_sec = data_config['batch_size'] / float(duration)
         time_remain = data_config['batch_size'] * (total_steps - step) / examples_per_sec

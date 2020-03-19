@@ -170,17 +170,37 @@ SiamFC-TensorFlow is released under the MIT License (refer to the LICENSE file f
   $ python scripts/export_siamese_fc_model.py
   ```
 
+- export fullly quantized tflite model, need tf-2.1.0 (version < 2.1.0 does no support the quantization of SPLIT)
+  ```
+  $ pip install pip install tensorflow-gpu==2.1.0
+  $ python scripts/export_siamese_fc_model.py
+  ```
+  **note**: you have to install [tf-slim](converted_model_full_quant.tflite)
+  
 - tracking from frozen graph
   ```
-  $ python scripts/tracking_from_frozen_graph.py
+  $ python scripts/tracking_from_frozen_graph.py (~0.02s in GTX1080Ti)
   ```
 
-- tracking using tflite model
+- tracking using tflite model (~0.09s in desktop CPU)
   ```
   $ python scripts/tracking_from_frozen_graph.py --model=inference_model/converted_model.tflite --lite=True
   ```
 
-- trackign using weight-only quantization model
+- tracking using weight-only quantization model (~0.5s in desktop CPU)
   ```
   $ python scripts/tracking_from_frozen_graph.py --model=inference_model/converted_model_weight_quant.tflite --lite=True
   ```
+
+- tracking using full quantization model (~8s in desktop CPU)
+  ```
+  $ python scripts/tracking_from_frozen_graph.py --model=inference_model/converted_model_full_quant.tflite --lite=True --full_quant=True
+  ```
+
+- Note:
+1. tensorflow lite quantization:
+   tensorflow with version < 2.1.0 does no support the quantization of SPLIT, so the split operation of alexnet can not convert withotu 2.1.0
+
+2. edgetpu compiler is only compatible with tensorflow 1.15.0, the .tflite model converted by tensorflow 2.x can not compiler to edgetpu model: https://github.com/tensorflow/tensorflow/issues/31368. Thus, the alexnet can not run in edgetpu (TODO, try mobilenet for siamese network).
+
+
