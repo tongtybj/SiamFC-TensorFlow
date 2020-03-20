@@ -17,13 +17,12 @@ import logging
 
 import tensorflow.compat.v1 as tf
 
-TF_MAJOR_VERSION = [ int(num) for num in tf.__version__.split('.')][0]
+TF_MAJOR_VERSION = int(tf.__version__.split(".")[0])
 
 from datasets.sampler import Sampler
 from datasets.transforms import Compose, RandomGray, RandomCrop, CenterCrop, RandomStretch
 from datasets.vid import VID
 from utils.misc_utils import get
-
 
 class DataLoader(object):
   def __init__(self, config, is_training):

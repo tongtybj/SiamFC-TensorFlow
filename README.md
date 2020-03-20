@@ -169,6 +169,10 @@ SiamFC-TensorFlow is released under the MIT License (refer to the LICENSE file f
   ```
   $ python scripts/export_siamese_fc_model.py
   ```
+- exporint from scratch training model :
+  ```
+  $ python scripts/export_siamese_fc_model.py --checkpoint_dir=Logs/SiamFC/track_model_checkpoints/SiamFC-3s-color-scratch
+  ```
 
 - export fullly quantized tflite model, need tf-2.1.0 (version < 2.1.0 does no support the quantization of SPLIT)
   ```
@@ -180,6 +184,10 @@ SiamFC-TensorFlow is released under the MIT License (refer to the LICENSE file f
 - tracking from frozen graph
   ```
   $ python scripts/tracking_from_frozen_graph.py (~0.02s in GTX1080Ti)
+  ```
+  or
+  ```
+  $ python scripts/tracking_from_frozen_graph.py --model=Logs/SiamFC/track_model_checkpoints/SiamFC-3s-color-scratch/models/frozen_graph.pb --config=Logs/SiamFC/track_model_checkpoints/SiamFC-3s-color-scratch
   ```
 
 - tracking using tflite model (~0.09s in desktop CPU)

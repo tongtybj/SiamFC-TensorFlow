@@ -17,16 +17,17 @@ from __future__ import print_function
 
 import logging
 
-import tensorflow as tf
+#import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from utils.misc_utils import get
 
 
 TF_MAJOR_VERSION = [ int(num) for num in tf.__version__.split('.')][0]
 if TF_MAJOR_VERSION == 1:
-  slim = tf.contrib.slim
+    import tensorflow.contrib.slim as slim
 else:
-  import tf_slim as slim
+    import tf_slim as slim
 
 
 def convolutional_alexnet_arg_scope(embed_config,
@@ -73,7 +74,6 @@ def convolutional_alexnet_arg_scope(embed_config,
   else:
     batch_norm_params = {}
     normalizer_fn = None
-    print("========= not use bn")
 
   weight_decay = get(embed_config, 'weight_decay', 5e-4)
   if trainable:
@@ -104,7 +104,7 @@ def convolutional_alexnet_arg_scope(embed_config,
         return arg_sc
 
 
-def convolutional_alexnet(inputs, reuse=None, scope='convolutional_alexnet'):
+def convolutional_alexnet(inputs, reuse=None, scope='convolutional_alexnet', split=True):
   """Defines the feature extractor of SiamFC.
 
   Args:
@@ -116,37 +116,46 @@ def convolutional_alexnet(inputs, reuse=None, scope='convolutional_alexnet'):
     net: the computed features of the inputs.
     end_points: the intermediate outputs of the embedding function.
   """
-  with tf.compat.v1.variable_scope(scope, 'convolutional_alexnet', [inputs], reuse=reuse) as sc:
+  with tf.variable_scope(scope, 'convolutional_alexnet', [inputs], reuse=reuse) as sc:
     end_points_collection = sc.name + '_end_points'
     with slim.arg_scope([slim.conv2d, slim.max_pool2d],
                         outputs_collections=end_points_collection):
       net = inputs
       net = slim.conv2d(net, 96, [11, 11], 2, scope='conv1')
       net = slim.max_pool2d(net, [3, 3], 2, scope='pool1')
-      with tf.compat.v1.variable_scope('conv2'):
-        b1, b2 = tf.split(net, 2, 3)
-        b1 = slim.conv2d(b1, 128, [5, 5], scope='b1')
-        # https://qiita.com/carushi@github/items/15175cd238f115a51f61
-        # The original implementation has bias terms for all convolution, but
-        # it actually isn't necessary if the convolution layer is followed by a batch
-        # normalization layer since batch norm will subtract the mean.
-        b2 = slim.conv2d(b2, 128, [5, 5], scope='b2')
-        net = tf.concat([b1, b2], 3)
+      if split == True:
+        with tf.variable_scope('conv2'):
+          b1, b2 = tf.split(net, 2, 3)
+          b1 = slim.conv2d(b1, 128, [5, 5], scope='b1')
+          # https://qiita.com/carushi@github/items/15175cd238f115a51f61
+          # The original implementation has bias terms for all convolution, but
+          # it actually isn't necessary if the convolution layer is followed by a batch
+          # normalization layer since batch norm will subtract the mean.
+          b2 = slim.conv2d(b2, 128, [5, 5], scope='b2')
+          net = tf.concat([b1, b2], 3)
+      else:
+        net = slim.conv2d(net, 256, [5, 5], scope='conv2')
       net = slim.max_pool2d(net, [3, 3], 2, scope='pool2')
       net = slim.conv2d(net, 384, [3, 3], 1, scope='conv3')
-      with tf.compat.v1.variable_scope('conv4'):
-        b1, b2 = tf.split(net, 2, 3)
-        b1 = slim.conv2d(b1, 192, [3, 3], 1, scope='b1')
-        b2 = slim.conv2d(b2, 192, [3, 3], 1, scope='b2')
-        net = tf.concat([b1, b2], 3)
-      # Conv 5 with only convolution, has bias
-      with tf.compat.v1.variable_scope('conv5'):
-        with slim.arg_scope([slim.conv2d],
-                            activation_fn=None, normalizer_fn=None):
+      if split == True:
+        with tf.variable_scope('conv4'):
           b1, b2 = tf.split(net, 2, 3)
-          b1 = slim.conv2d(b1, 128, [3, 3], 1, scope='b1')
-          b2 = slim.conv2d(b2, 128, [3, 3], 1, scope='b2')
-        net = tf.concat([b1, b2], 3)
+          b1 = slim.conv2d(b1, 192, [3, 3], 1, scope='b1')
+          b2 = slim.conv2d(b2, 192, [3, 3], 1, scope='b2')
+          net = tf.concat([b1, b2], 3)
+      else:
+        net = slim.conv2d(net, 384, [3, 3], 1, scope='conv4')
+      # Conv 5 with only convolution, has bias
+      if split == True:
+        with tf.variable_scope('conv5'):
+          with slim.arg_scope([slim.conv2d],
+                              activation_fn=None, normalizer_fn=None):
+            b1, b2 = tf.split(net, 2, 3)
+            b1 = slim.conv2d(b1, 128, [3, 3], 1, scope='b1')
+            b2 = slim.conv2d(b2, 128, [3, 3], 1, scope='b2')
+            net = tf.concat([b1, b2], 3)
+      else:
+        net = slim.conv2d(net, 256, [3, 3], 1, scope='conv5')
       # Convert end_points_collection into a dictionary of end_points.
       end_points = slim.utils.convert_collection_to_dict(end_points_collection)
       return net, end_points

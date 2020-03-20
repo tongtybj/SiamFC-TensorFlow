@@ -11,7 +11,8 @@ from glob import glob
 import re
 import argparse
 import collections
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+#import tensorflow as tf
 import json
 import numpy as np
 import cv2
@@ -54,7 +55,9 @@ class SiameseTracking():
         self.lite = lite
         self.full_quant = full_quant
         if self.lite == True:
-            self.interpreter = tf.lite.Interpreter(model_path=model_filepath)
+            self.interpreter = tf.lite.Interpreter(model_path=model_filepath,
+                                                   experimental_delegates=[tf.lite.experimental.load_delegate('libedgetpu.so.1')])
+
             self.interpreter.allocate_tensors()
             self.lite_input_details = self.interpreter.get_input_details()
             print(self.lite_input_details)
@@ -174,6 +177,7 @@ class SiameseTracking():
             self.interpreter.set_tensor(self.lite_input_details[0]['index'], template_image)
             self.interpreter.set_tensor(self.lite_input_details[1]['index'], search_image)
             self.interpreter.invoke()
+            #raw_output_data = self.interpreter.get_tensor(self.lite_output_details[0]['index'])
             raw_output_data = self.interpreter.get_tensor(self.lite_output_details[0]['index'])
             # post-processing for upsampling the result
             response = cv2.resize(raw_output_data, dsize=None, fx=self.track_config['upsample_factor'], fy=self.track_config['upsample_factor'], interpolation=cv2.INTER_CUBIC)

@@ -33,7 +33,8 @@ MODEL_CONFIG = {
                    'bn_epsilon': 1e-6,
                    'embedding_feature_num': 256,
                    'weight_decay': 5e-4,
-                   'stride': 8, },
+                   'stride': 8,
+                   'split': False },
 
   'adjust_response_config': {'train_bias': True,
                              'scale': 1e-3, },
