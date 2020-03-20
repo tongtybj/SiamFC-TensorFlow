@@ -13,15 +13,18 @@ from __future__ import print_function
 
 import functools
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from datasets.dataloader import DataLoader
 from embeddings.convolutional_alexnet import convolutional_alexnet_arg_scope, convolutional_alexnet
 from metrics.track_metrics import center_dist_error, center_score_error
 from utils.train_utils import construct_gt_score_maps, load_mat_model
 
-slim = tf.contrib.slim
-
+TF_MAJOR_VERSION = [ int(num) for num in tf.__version__.split('.')][0]
+if TF_MAJOR_VERSION == 1:
+    import tensorflow.contrib.slim as slim
+else:
+    import tf_slim as slim
 
 class SiameseModel:
   def __init__(self, model_config, train_config, mode='train'):
@@ -93,9 +96,11 @@ class SiameseModel:
                                                 is_training=self.is_training())
 
     @functools.wraps(convolutional_alexnet)
-    def embedding_fn(images, reuse=False):
+    def embedding_fn(images, reuse=False, split=False):
+
+      print("======= split:{}".format(config['split']))
       with slim.arg_scope(arg_scope):
-        return convolutional_alexnet(images, reuse=reuse)
+        return convolutional_alexnet(images, reuse=reuse, split=config['split'])
 
     self.exemplar_embeds, _ = embedding_fn(self.exemplars, reuse=reuse)
     self.instance_embeds, _ = embedding_fn(self.instances, reuse=True)
