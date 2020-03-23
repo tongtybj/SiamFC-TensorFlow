@@ -23,7 +23,7 @@ RUN_NAME = 'SiamFC-3s-color-scratch'  # identifier of the experiment
 MODEL_CONFIG = {
   'z_image_size': 127,  # Exemplar image size
 
-  'embed_config': {'embedding_name': 'convolutional_alexnet',
+  'embed_config': {'embedding_name': 'feature_extractor',
                    'embedding_checkpoint_file': None,  # mat file path of the pretrained embedding model.
                    'train_embedding': True,
                    'init_method': 'kaiming_normal',
@@ -34,10 +34,15 @@ MODEL_CONFIG = {
                    'embedding_feature_num': 256,
                    'weight_decay': 5e-4,
                    'stride': 8,
-                   'split': False },
+                   'feature_extractor': 'alexnet',
+                   'quantization': False},
 
   'adjust_response_config': {'train_bias': True,
                              'scale': 1e-3, },
+
+  'alexnet': {'split': True,},
+  'mobilenet_v1': {'final_endpoint': 'Conv2d_5_pointwise',
+                   'depth_multiplier': 1.0, },
 }
 
 TRAIN_CONFIG = {
@@ -84,10 +89,13 @@ TRAIN_CONFIG = {
   'log_every_n_steps': 10,
 
   # Frequency to save model
-  'save_model_every_n_step': 5.32e4 // 8,  # save model every epoch
+  'save_model_every_n_step': 6650, #5.32e4 // 8,  # save model every epoch
 
   # How many model checkpoints to keep. No limit if None.
   'max_checkpoints_to_keep': None,
+
+  # Whether only do graph export
+  'export': False
 }
 
 TRACK_CONFIG = {

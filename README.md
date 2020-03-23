@@ -212,3 +212,4 @@ SiamFC-TensorFlow is released under the MIT License (refer to the LICENSE file f
 2. edgetpu compiler is only compatible with tensorflow 1.15.0, the .tflite model converted by tensorflow 2.x can not compiler to edgetpu model: https://github.com/tensorflow/tensorflow/issues/31368. Thus, the alexnet can not run in edgetpu (TODO, try mobilenet for siamese network).
 
 
+3. install tensorflow/models/resaerch/slim with `pip install -e .` (setup.py)

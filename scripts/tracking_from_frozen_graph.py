@@ -67,8 +67,8 @@ class SiameseTracking():
             print('Loading frozen graphmodel...')
             self.graph = tf.Graph()
 
-            with tf.compat.v1.gfile.GFile(model_filepath, 'rb') as f:
-                graph_def = tf.compat.v1.GraphDef()
+            with tf.gfile.GFile(model_filepath, 'rb') as f:
+                graph_def = tf.GraphDef()
                 graph_def.ParseFromString(f.read())
 
                 for n in graph_def.node:
@@ -79,7 +79,7 @@ class SiameseTracking():
                 tf.import_graph_def(graph_def)
                 self.graph.finalize()
 
-            self.sess = tf.compat.v1.Session(graph = self.graph)
+            self.sess = tf.Session(graph = self.graph)
 
         with open(osp.join(config_filepath, 'model_config.json'), 'r') as f:
             self.model_config = json.load(f)
@@ -176,7 +176,11 @@ class SiameseTracking():
             # https://www.tensorflow.org/lite/guide/inference
             self.interpreter.set_tensor(self.lite_input_details[0]['index'], template_image)
             self.interpreter.set_tensor(self.lite_input_details[1]['index'], search_image)
+            dt1 = datetime.datetime.now()
             self.interpreter.invoke()
+            dt2 = datetime.datetime.now()
+            print("inference du: {}".format(dt2.timestamp() - dt1.timestamp()))
+
             #raw_output_data = self.interpreter.get_tensor(self.lite_output_details[0]['index'])
             raw_output_data = self.interpreter.get_tensor(self.lite_output_details[0]['index'])
             # post-processing for upsampling the result
@@ -184,7 +188,11 @@ class SiameseTracking():
 
         else:
             output_tensor = self.graph.get_tensor_by_name("import/upsample/final_result:0")
+            dt1 = datetime.datetime.now()
             response = self.sess.run(output_tensor, feed_dict = {"import/template_image:0": template_image, "import/input_image:0": search_image})
+            dt2 = datetime.datetime.now()
+            print("inference du: {}".format(dt2.timestamp() - dt1.timestamp()))
+
 
         with np.errstate(all='raise'):  # Raise error if something goes wrong
           response = response - np.min(response)
@@ -272,7 +280,7 @@ if __name__ == "__main__":
             dt1 = datetime.datetime.now()
             outputs = tracker.inference(template_image, input_image)
             dt2 = datetime.datetime.now()
-            print(dt2.timestamp() - dt1.timestamp())
+            print("tracking du: {}".format(dt2.timestamp() - dt1.timestamp()))
 
             # visualize
             search_image = outputs['search_image'].astype(np.uint8)
