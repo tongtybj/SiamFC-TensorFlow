@@ -40,7 +40,7 @@ else:
 
 
 class ExportInferenceModel():
-    def __init__(self, checktpoint_dir):
+    def __init__(self, checktpoint_dir, checkpoint_num):
         self.checkpoint_dir = checktpoint_dir
         self.model_save_dir = osp.join(self.checkpoint_dir, 'models')
         self.model_config, self.train_config, self.track_config = load_cfgs(self.checkpoint_dir)
@@ -112,10 +112,13 @@ class ExportInferenceModel():
 
             if osp.isdir(self.checkpoint_dir):
               checkpoint = tf.train.latest_checkpoint(self.checkpoint_dir)
+
+              if checkpoint_num > 0:
+                checkpoint = osp.join(self.checkpoint_dir, "model.ckpt-") + str(checkpoint_num)
+
               if not checkpoint:
                 raise ValueError("No checkpoint file found in: {}".format(checkpoint))
 
-            checkpoint = osp.join(self.checkpoint_dir, "model.ckpt-93000")
             saver.restore(sess, checkpoint)
 
             #sess.run(tf.initialize_all_variables())
@@ -191,7 +194,10 @@ if __name__ == '__main__':
     parser.add_argument('--checkpoint_dir', dest='checkpoint_dir', action="store",
                             help='the directroy path of traning checkpoint', default='Logs/SiamFC/track_model_checkpoints/train', type=str)
 
+    parser.add_argument('--checkpoint_num', dest='checkpoint_num', action="store",
+                            help='the directroy path of traning checkpoint', default=-1, type=int)
+
     args, _ = parser.parse_known_args()
 
-    ExportInferenceModel(args.checkpoint_dir)
+    ExportInferenceModel(args.checkpoint_dir, args.checkpoint_num)
 
