@@ -55,8 +55,8 @@ class SiameseTracking():
         self.lite = lite
         self.full_quant = full_quant
         if self.lite == True:
-            self.interpreter = tf.lite.Interpreter(model_path=model_filepath,
-                                                   experimental_delegates=[tf.lite.experimental.load_delegate('libedgetpu.so.1')])
+            #self.interpreter = tf.lite.Interpreter(model_path=model_filepath, experimental_delegates=[tf.lite.experimental.load_delegate('libedgetpu.so.1')])
+            self.interpreter = tf.lite.Interpreter(model_path=model_filepath)
 
             self.interpreter.allocate_tensors()
             self.lite_input_details = self.interpreter.get_input_details()
