@@ -139,6 +139,9 @@ class Tee(object):
   def __del__(self):
     self.close()
 
+def have_cfgs(train_dir):
+  return osp.exists(osp.join(train_dir, 'model_config.json')) and osp.exists(osp.join(train_dir, 'train_config.json')) and osp.exists(osp.join(train_dir, 'track_config.json'))
+
 
 def save_cfgs(train_dir, model_config, train_config, track_config):
   """Save all configurations in JSON format for future reference"""

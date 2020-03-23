@@ -15,10 +15,12 @@ import functools
 
 import tensorflow.compat.v1 as tf
 
-from datasets.dataloader import DataLoader
 from embeddings.convolutional_alexnet import convolutional_alexnet_arg_scope, convolutional_alexnet
 from metrics.track_metrics import center_dist_error, center_score_error
 from utils.train_utils import construct_gt_score_maps, load_mat_model
+from siamese_datasets.dataloader import DataLoader
+
+from tensorflow.contrib import quantize as contrib_quantize
 
 TF_MAJOR_VERSION = [ int(num) for num in tf.__version__.split('.')][0]
 if TF_MAJOR_VERSION == 1:
@@ -26,12 +28,15 @@ if TF_MAJOR_VERSION == 1:
 else:
     import tf_slim as slim
 
+from nets import mobilenet_v1
+
 class SiameseModel:
-  def __init__(self, model_config, train_config, mode='train'):
+  def __init__(self, model_config, train_config, track_config, mode='train'):
     self.model_config = model_config
     self.train_config = train_config
+    self.track_config = track_config
     self.mode = mode
-    assert mode in ['train', 'validation', 'inference']
+    assert mode in ['train', 'validation']
 
     if self.mode == 'train':
       self.data_config = self.train_config['train_data_config']
@@ -47,6 +52,9 @@ class SiameseModel:
     self.init_fn = None
     self.global_step = None
 
+    if self.train_config["export"]:
+      self.data_config['batch_size'] = 1
+
   def is_training(self):
     """Returns true if the model is built for training mode"""
     return self.mode == 'train'
@@ -58,28 +66,37 @@ class SiameseModel:
       self.exemplars: image batch of shape [batch, hz, wz, 3]
       self.instances: image batch of shape [batch, hx, wx, 3]
     """
-    if self.mode in ['train', 'validation']:
+    if self.train_config["export"]:
+      size_z = self.model_config['z_image_size']
+      size_x = self.track_config['x_image_size']
+
+      '''
+      template_image = tf.placeholder(shape=[1, size_z, size_z, 3],
+                                          dtype=tf.float32,
+                                          name='template_image')
+      input_image = tf.placeholder(shape=[1, size_x, size_x, 3],
+                                          dtype=tf.float32,
+                                          name='input_image')
+      self.exemplars =tf.expand_dims(template_image, 0)
+      self.instances =tf.expand_dims(input_image, 0)
+      '''
+      self.exemplars = tf.placeholder(shape=[1, size_z, size_z, 3],
+                                      dtype=tf.float32,
+                                      name='template_image')
+      self.instances = tf.placeholder(shape=[1, size_x, size_x, 3],
+                                      dtype=tf.float32,
+                                      name='input_image')
+
+    else:
       with tf.device("/cpu:0"):  # Put data loading and preprocessing in CPU is substantially faster
         self.dataloader = DataLoader(self.data_config, self.is_training())
         self.dataloader.build()
         exemplars, instances = self.dataloader.get_one_batch()
 
-        exemplars = tf.to_float(exemplars)
-        instances = tf.to_float(instances)
-    else:
-      self.examplar_feed = tf.placeholder(shape=[None, None, None, 3],
-                                          dtype=tf.uint8,
-                                          name='examplar_input')
-      self.instance_feed = tf.placeholder(shape=[None, None, None, 3],
-                                          dtype=tf.uint8,
-                                          name='instance_input')
-      exemplars = tf.to_float(self.examplar_feed)
-      instances = tf.to_float(self.instance_feed)
+        self.exemplars = tf.to_float(exemplars)
+        self.instances = tf.to_float(instances)
 
-    self.exemplars = exemplars
-    self.instances = instances
-
-  def build_image_embeddings(self, reuse=False):
+  def build_image_embeddings(self, reuse):
     """Builds the image model subgraph and generates image embeddings
 
     Inputs:
@@ -90,17 +107,41 @@ class SiameseModel:
       self.exemplar_embeds: A Tensor of shape [batch, hz_embed, wz_embed, embed_dim]
       self.instance_embeds: A Tensor of shape [batch, hx_embed, wx_embed, embed_dim]
     """
-    config = self.model_config['embed_config']
-    arg_scope = convolutional_alexnet_arg_scope(config,
-                                                trainable=config['train_embedding'],
+    feature_extactor = self.model_config['embed_config']['feature_extractor']
+
+    feature_extractors = {'alexnet': self.build_image_embeddings_alexnet,
+                          'mobilenet_v1': self.build_image_embeddings_mobilenet_v1}
+
+    return feature_extractors[feature_extactor](reuse)
+
+  def build_image_embeddings_alexnet(self, reuse=False):
+    model_config = self.model_config['embed_config']
+    alexnet_config = self.model_config['alexnet']
+    arg_scope = convolutional_alexnet_arg_scope(model_config,
+                                                trainable=model_config['train_embedding'],
                                                 is_training=self.is_training())
 
     @functools.wraps(convolutional_alexnet)
-    def embedding_fn(images, reuse=False, split=False):
+    def embedding_fn(images, reuse=False):
 
-      print("======= split:{}".format(config['split']))
-      with slim.arg_scope(arg_scope):
-        return convolutional_alexnet(images, reuse=reuse, split=config['split'])
+        with slim.arg_scope(arg_scope):
+            return convolutional_alexnet(images, reuse=reuse, split=alexnet_config['split'])
+
+    self.exemplar_embeds, _ = embedding_fn(self.exemplars, reuse=reuse)
+    self.instance_embeds, _ = embedding_fn(self.instances, reuse=True)
+
+  def build_image_embeddings_mobilenet_v1(self, reuse=False):
+    """Builds the image model subgraph and generates image embeddings based on mobilenent
+    """
+    model_config = self.model_config['embed_config']
+    mobilenent_config = self.model_config['mobilenet_v1']
+
+    def embedding_fn(images, reuse=False):
+        with tf.variable_scope('MobilenetV1', reuse=reuse) as scope:
+            with slim.arg_scope(mobilenet_v1.mobilenet_v1_arg_scope(is_training=True)):
+                return mobilenet_v1.mobilenet_v1_base(images,
+                                                      final_endpoint = mobilenent_config['final_endpoint'],
+                                                      depth_multiplier = mobilenent_config['depth_multiplier'], scope=scope)
 
     self.exemplar_embeds, _ = embedding_fn(self.exemplars, reuse=reuse)
     self.instance_embeds, _ = embedding_fn(self.instances, reuse=True)
@@ -167,6 +208,14 @@ class SiameseModel:
       total_loss = tf.losses.get_total_loss()
       self.batch_loss = batch_loss
       self.total_loss = total_loss
+
+      # quantization
+      # good note: https://www.tensorflowers.cn/t/7136
+      if self.model_config['embed_config']['quantization']:
+        if self.train_config["export"]:
+          contrib_quantize.create_eval_graph()
+        else:
+          contrib_quantize.create_training_graph(quant_delay=200000)
 
       tf.summary.image('exemplar', self.exemplars, family=self.mode)
       tf.summary.image('instance', self.instances, family=self.mode)

@@ -25,7 +25,7 @@ from sacred.observers import FileStorageObserver
 
 import configuration
 import siamese_model
-from utils.misc_utils import auto_select_gpu, mkdir_p, save_cfgs
+from utils.misc_utils import auto_select_gpu, mkdir_p, have_cfgs, save_cfgs, load_cfgs
 
 ex = Experiment(configuration.RUN_NAME)
 ex.observers.append(FileStorageObserver.create(osp.join(configuration.LOG_DIR, 'sacred')))
@@ -96,6 +96,13 @@ def main(model_config, train_config, track_config):
     logging.info('Creating training directory: %s', train_dir)
     mkdir_p(train_dir)
 
+  if have_cfgs(train_dir):
+    model_config, train_config, track_config = load_cfgs(train_dir)
+    print("=================== load cfg ")
+  else:
+    save_cfgs(train_dir, model_config, train_config, track_config)
+    print("=================== save cfg ")
+
   g = tf.Graph()
   with g.as_default():
     # Set fixed seed for reproducible experiments
@@ -104,13 +111,10 @@ def main(model_config, train_config, track_config):
     tf.set_random_seed(train_config['seed'])
 
     # Build the training and validation model
-    model = siamese_model.SiameseModel(model_config, train_config, mode='train')
+    model = siamese_model.SiameseModel(model_config, train_config, track_config, mode='train')
     model.build()
-    model_va = siamese_model.SiameseModel(model_config, train_config, mode='validation')
+    model_va = siamese_model.SiameseModel(model_config, train_config, track_config, mode='validation')
     model_va.build(reuse=True)
-
-    # Save configurations for future reference
-    save_cfgs(train_dir, model_config, train_config, track_config)
 
     learning_rate = _configure_learning_rate(train_config, model.global_step)
     optimizer = _configure_optimizer(train_config, learning_rate)
@@ -161,12 +165,40 @@ def main(model_config, train_config, track_config):
       saver.restore(sess, model_path)
       start_step = tf.train.global_step(sess, model.global_step.name) + 1
 
+    # export
+    if train_config["export"]:
+      # still debugging
+      '''
+      frozen_graph_def = tf.graph_util.convert_variables_to_constants(sess, tf.get_default_graph().as_graph_def(), ["train/detection/add"])
+      frozen_graph = tf.Graph()
+      with frozen_graph.as_default():
+        tf.import_graph_def(frozen_graph_def)
+        save_model_dir = osp.join(train_config['train_dir'], 'models')
+        tf.train.write_graph(frozen_graph_def, save_model_dir, 'quantized_frozen_graph.pb', as_text=False)
+        tf.train.write_graph(frozen_graph_def, save_model_dir, 'quantized_frozen_graph.pbtxt', as_text=True)
+
+        output_op = sess.graph.get_tensor_by_name("validation/detection/add:0")
+        input1_op = sess.graph.get_tensor_by_name("validation/template_image:0")
+        input2_op = sess.graph.get_tensor_by_name("validation/input_image:0")
+
+        converter = tf.lite.TFLiteConverter.from_session(sess, [input1_op, input2_op], [output_op])
+        converter.inference_type = tf.lite.constants.QUANTIZED_UINT8
+        input_arrays = converter.get_input_arrays()
+        converter.quantized_input_stats = {input_arrays[0] : (0., 1.), input_arrays[1] : (0., 1.)}  # mean, std_dev
+        converter.default_ranges_stats = (0, 255)
+        tflite_model = converter.convert()
+        open(osp.join(save_model_dir, 'quantized_frozen_graph.tflite'), "wb").write(tflite_model)
+      '''
+      return
+
     # Training loop
     data_config = train_config['train_data_config']
     total_steps = int(data_config['epoch'] *
                       data_config['num_examples_per_epoch'] /
                       data_config['batch_size'])
     logging.info('Train for {} steps'.format(total_steps))
+    save_step = int(data_config['num_examples_per_epoch'] / data_config['batch_size'])
+    print("=========== save_step: {}".format(save_step))
     for step in range(start_step, total_steps):
       start_time = time.time()
       # no "feed_dict"
@@ -187,6 +219,6 @@ def main(model_config, train_config, track_config):
         summary_str = sess.run(summary_op)
         summary_writer.add_summary(summary_str, step)
 
-      if step % train_config['save_model_every_n_step'] == 0 or (step + 1) == total_steps:
+      if step % save_step == 0 or (step + 1) == total_steps:
         checkpoint_path = osp.join(train_config['train_dir'], 'model.ckpt')
         saver.save(sess, checkpoint_path, global_step=step)

@@ -23,7 +23,11 @@ sys.path.append(osp.join(CURRENT_DIR, '..'))
 
 from embeddings.convolutional_alexnet import convolutional_alexnet_arg_scope, convolutional_alexnet
 from utils.misc_utils import load_cfgs
-from datasets.dataloader import DataLoader
+from siamese_datasets.dataloader import DataLoader
+
+from nets import mobilenet_v1
+
+from tensorflow.contrib import quantize as contrib_quantize
 
 #tensorflow.enable_eager_execution()
 
@@ -44,8 +48,6 @@ class ExportInferenceModel():
         self.dataloader = DataLoader(self.train_config['validation_data_config'], False)
         self.dataloader.build()
 
-
-        print("===== split: {}".format(self.model_config['embed_config']["split"]))
         size_z = self.model_config['z_image_size']
         size_x = self.track_config['x_image_size']
 
@@ -61,15 +63,25 @@ class ExportInferenceModel():
             embed_config = self.model_config['embed_config']
 
             # build cnn for feature extraction from either template image or input image
-            arg_scope = convolutional_alexnet_arg_scope(embed_config,
-                                                    trainable=embed_config['train_embedding'],
-                                                    is_training=False)
-            with slim.arg_scope(arg_scope):
-                embed_x, end_points = convolutional_alexnet(input_image, reuse=False, split=embed_config['split'])
-                embed_z, end_points_z = convolutional_alexnet(template_image, reuse=True, split=embed_config['split'])
-                #print("input image output: {}".format(embed_x.shape))
-                #print("template image output: {}".format(embed_z.shape))
+            feature_extactor = self.model_config['embed_config']['feature_extractor']
+            if feature_extactor == "alexnet":
+              alexnet_config = self.model_config['alexnet']
+              arg_scope = convolutional_alexnet_arg_scope(embed_config,
+                                                          trainable=embed_config['train_embedding'],
+                                                          is_training=False)
+              with slim.arg_scope(arg_scope):
+                embed_x, end_points = convolutional_alexnet(input_image, reuse=False, split=alexnet_config['split'])
+                embed_z, end_points_z = convolutional_alexnet(template_image, reuse=True, split=alexnet_config['split'])
 
+            elif feature_extactor == "mobilenet_v1":
+              mobilenent_config = self.model_config['mobilenet_v1']
+              with slim.arg_scope(mobilenet_v1.mobilenet_v1_arg_scope(is_training=False)):
+                with tf.variable_scope('MobilenetV1', reuse=False) as scope:
+                  embed_x, end_points = mobilenet_v1.mobilenet_v1_base(input_image, final_endpoint = mobilenent_config['final_endpoint'], depth_multiplier = mobilenent_config['depth_multiplier'], scope=scope)
+                with tf.variable_scope('MobilenetV1', reuse=True) as scope:
+                  embed_z, end_points_z = mobilenet_v1.mobilenet_v1_base(template_image, final_endpoint = mobilenent_config['final_endpoint'], depth_multiplier = mobilenent_config['depth_multiplier'], scope=scope)
+            else:
+              raise ValueError("Invalid feature extractor: {}".format(feature_extactor))
 
             # build cross-correlation between features from template image and input image
             with tf.variable_scope('detection'):
@@ -91,14 +103,19 @@ class ExportInferenceModel():
                 response_up = tf.image.resize(response, up_size, method=up_method, align_corners=True)
                 response_up = tf.squeeze(response_up, name="final_result")
 
-            #print("final op: {}".format(response_up.name))
-
+            # saver = tf.train.Saver(tf.global_variables())
+            # https://www.tensorflow.org/api_docs/python/tf/train/ExponentialMovingAverage#variables_to_restore
+            # https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet/mobilenet_example.ipynb
+            ema = tf.train.ExponentialMovingAverage(0)
+            variables_to_restore = ema.variables_to_restore(moving_avg_variables=[])
             saver = tf.train.Saver(tf.global_variables())
-            if osp.isdir(self.checkpoint_dir):
-                checkpoint = tf.train.latest_checkpoint(self.checkpoint_dir)
-                if not checkpoint:
-                    raise ValueError("No checkpoint file found in: {}".format(checkpoint))
 
+            if osp.isdir(self.checkpoint_dir):
+              checkpoint = tf.train.latest_checkpoint(self.checkpoint_dir)
+              if not checkpoint:
+                raise ValueError("No checkpoint file found in: {}".format(checkpoint))
+
+            checkpoint = osp.join(self.checkpoint_dir, "model.ckpt-93000")
             saver.restore(sess, checkpoint)
 
             #sess.run(tf.initialize_all_variables())
@@ -131,9 +148,6 @@ class ExportInferenceModel():
 
                 # tensorflow lite
 
-                for op in frozen_graph.get_operations():
-                    print(op.name)
-
                 # we do not add the last upsample operation in tensorflow since this should be implemented in customized operation. Too much cost, and this is easy to implement in CPU process.
                 converter = tf.lite.TFLiteConverter.from_frozen_graph(osp.join(self.model_save_dir, 'frozen_graph.pb'), ['template_image', 'input_image'], ['detection/add'])
 
@@ -144,6 +158,8 @@ class ExportInferenceModel():
                 converter.dump_graphviz_dir = './inference_model'
                 tflite_model = converter.convert()
                 open(osp.join(self.model_save_dir, 'converted_model.tflite'), "wb").write(tflite_model)
+
+                return
 
                 # quantization: https://arxiv.org/pdf/1712.05877.pdf
                 # only weigh quatization is very slow x5
@@ -173,7 +189,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='')
 
     parser.add_argument('--checkpoint_dir', dest='checkpoint_dir', action="store",
-                            help='the directroy path of traning checkpoint', default='Logs/SiamFC/track_model_checkpoints/SiamFC-3s-color-pretrained', type=str)
+                            help='the directroy path of traning checkpoint', default='Logs/SiamFC/track_model_checkpoints/train', type=str)
 
     args, _ = parser.parse_known_args()
 

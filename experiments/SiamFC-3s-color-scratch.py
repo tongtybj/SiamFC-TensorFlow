@@ -20,7 +20,7 @@ from configuration import LOG_DIR
 from train_siamese_model import ex
 
 if __name__ == '__main__':
-  RUN_NAME = 'SiamFC-3s-color-scratch'
+  RUN_NAME = 'train'
   ex.run(config_updates={'train_config': {'train_dir': osp.join(LOG_DIR, 'track_model_checkpoints', RUN_NAME), },
                          'track_config': {'log_dir': osp.join(LOG_DIR, 'track_model_inference', RUN_NAME), }
                          },
