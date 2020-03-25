@@ -52,52 +52,77 @@ class TargetState(object):
     #self.scale_idx = scale_idx  # scale index in the searched scales
 
 class SiameseTracking():
-    def __init__(self, model_filepath, config_filepath, lite, full_quant, edgetpu, init_bb):
+    def __init__(self, models_dir, template_model, search_model, cross_model, config_filepath, init_bb):
 
-        self.lite = lite
-        self.full_quant = full_quant
-        if self.lite == True:
-          if edgetpu:
-            self.interpreter = tflite.Interpreter(model_path=model_filepath, experimental_delegates=[tflite.load_delegate('libedgetpu.so.1')])
-          else:
-            self.interpreter = tflite.Interpreter(model_path=model_filepath)
+      experimental_delegates = []
+      if 'edgetpu' in template_model:
+        experimental_delegates.append(tflite.load_delegate('libedgetpu.so.1'))
+      self.interpreter_template = tflite.Interpreter(model_path=osp.join(models_dir, template_model), experimental_delegates=experimental_delegates)
+      experimental_delegates = []
+      if 'edgetpu' in search_model:
+        experimental_delegates.append(tflite.load_delegate('libedgetpu.so.1'))
+      self.interpreter_search = tflite.Interpreter(model_path=osp.join(models_dir, search_model), experimental_delegates=experimental_delegates)
+      experimental_delegates = []
+      if 'edgetpu' in cross_model:
+        experimental_delegates.append(tflite.load_delegate('libedgetpu.so.1'))
+        print(experimental_delegates)
+      self.interpreter_cross = tflite.Interpreter(model_path=osp.join(models_dir, cross_model), experimental_delegates=experimental_delegates)
 
-          self.interpreter.allocate_tensors()
-          self.lite_input_details = self.interpreter.get_input_details()
-          self.lite_output_details = self.interpreter.get_output_details()
-        else:
-          print('Loading frozen graphmodel...')
-          self.graph = tf.Graph()
+      self.interpreter_template.allocate_tensors()
+      self.interpreter_search.allocate_tensors()
+      self.interpreter_cross.allocate_tensors()
+      self.template_input_details = self.interpreter_template.get_input_details()
+      self.template_output_details = self.interpreter_template.get_output_details()
+      self.search_input_details = self.interpreter_search.get_input_details()
+      self.search_output_details = self.interpreter_search.get_output_details()
+      self.cross_input_details = self.interpreter_cross.get_input_details()
+      self.cross_output_details = self.interpreter_cross.get_output_details()
 
-          with tf.gfile.GFile(model_filepath, 'rb') as f:
-            graph_def = tf.GraphDef()
-            graph_def.ParseFromString(f.read())
+      self.embed_z_scale = 1.0
+      self.embed_z_offset = 0.0
+      if 'full_quant' in template_model:
+        self.embed_z_scale = self.search_output_details[0]['quantization_parameters']['scales'][0]
+        self.embed_z_offset = self.search_output_details[0]['quantization_parameters']['zero_points'][0]
 
-            for n in graph_def.node:
-              if n.op in ('Placeholder'):
-                print("placeholder: {}".format(n.name))
+      self.embed_x_scale = 1.0
+      self.embed_x_offset = 0.0
+      if 'full_quant' in search_model:
+        self.embed_x_scale = self.search_output_details[0]['quantization_parameters']['scales'][0]
+        self.embed_x_offset = self.search_output_details[0]['quantization_parameters']['zero_points'][0]
 
-          with self.graph.as_default():
-            tf.import_graph_def(graph_def)
-            self.graph.finalize()
+      self.cross_input_template_scale = 1.0
+      self.cross_input_template_offset = 0.0
+      self.cross_input_search_scale = 1.0
+      self.cross_input_search_offset = 0.0
+      self.cross_output_scale = 1.0
+      self.cross_output_offset = 0.0
+      if 'full_quant' in cross_model:
+        print(self.cross_input_details)
+        self.cross_input_template_scale = self.cross_input_details[0]['quantization_parameters']['scales'][0]
+        self.cross_input_template_offset = self.cross_input_details[0]['quantization_parameters']['zero_points'][0]
+        self.cross_input_search_scale = self.cross_input_details[1]['quantization_parameters']['scales'][0]
+        self.cross_input_search_offset = self.cross_input_details[1]['quantization_parameters']['zero_points'][0]
+        self.cross_output_scale = self.cross_output_details[0]['quantization_parameters']['scales'][0]
+        self.cross_output_offset = self.cross_output_details[0]['quantization_parameters']['zero_points'][0]
+        print(self.cross_input_template_scale, self.cross_input_template_offset)
+        print(self.cross_input_search_scale, self.cross_input_search_offset)
+        print(self.cross_output_scale, self.cross_output_offset)
 
-            self.sess = tf.Session(graph = self.graph)
+      with open(osp.join(config_filepath, 'model_config.json'), 'r') as f:
+        self.model_config = json.load(f)
+      with open(osp.join(config_filepath, 'track_config.json'), 'r') as f:
+        self.track_config = json.load(f)
+      self.search_image_size = self.track_config['x_image_size']  # search image size
+      self.template_image_size = self.model_config['z_image_size']  # template image size
 
-        with open(osp.join(config_filepath, 'model_config.json'), 'r') as f:
-          self.model_config = json.load(f)
-        with open(osp.join(config_filepath, 'track_config.json'), 'r') as f:
-          self.track_config = json.load(f)
-        self.search_image_size = self.track_config['x_image_size']  # search image size
-        self.template_image_size = self.model_config['z_image_size']  # template image size
-
-        self.search_center = np.array([get_center(self.search_image_size),
+      self.search_center = np.array([get_center(self.search_image_size),
                                        get_center(self.search_image_size)])
 
-        self.window_influence = self.track_config['window_influence']
-        self.current_target_state = None
-        self.window = None  # Cosine window
-        self.original_target_height = 0
-        self.original_target_width = 0
+      self.window_influence = self.track_config['window_influence']
+      self.current_target_state = None
+      self.window = None  # Cosine window
+      self.original_target_height = 0
+      self.original_target_width = 0
 
     def update_template_image(self, input_image, target_bbox):
 
@@ -118,10 +143,7 @@ class SiameseTracking():
       # Update the current_target_state
       self.current_target_state = TargetState(bbox=bbox, search_pos=self.search_center)
 
-      if self.full_quant == True:
-        return template_image.astype(np.uint8)
-      else:
-        return template_image.astype(np.float32)
+      return template_image.astype(np.uint8)
 
     def crop_search_image(self, input_image, target_bbox):
       target_yx = np.array([target_bbox.y, target_bbox.x])
@@ -161,42 +183,51 @@ class SiameseTracking():
 
       search_image = cv2.resize(search_image, (self.search_image_size, self.search_image_size))
 
-      if self.full_quant == True:
-        return search_image.astype(np.uint8), search_resize_rate
-      else:
-        return search_image.astype(np.float32), search_resize_rate
+      return search_image.astype(np.uint8), search_resize_rate
 
     def inference(self, template_image, input_image):
 
       search_image, search_resize_rate  = self.crop_search_image(input_image, self.current_target_state.bbox)
 
       response = None
-      if self.lite == True:
-        # https://www.tensorflow.org/lite/guide/inference
-        self.interpreter.set_tensor(self.lite_input_details[0]['index'], template_image)
-        self.interpreter.set_tensor(self.lite_input_details[1]['index'], search_image)
 
-        #self.interpreter.set_tensor(self.lite_input_details[0]['index'], search_image)
+      dt1 = datetime.datetime.now()
+      if self.embed_z_scale == 1:
+        template_image = template_image.astype(np.float32)
+      self.interpreter_template.set_tensor(self.template_input_details[0]['index'], template_image)
+      self.interpreter_template.invoke()
+      dt2 = datetime.datetime.now()
+      print("template inference du: {}".format(dt2.timestamp() - dt1.timestamp()))
+      embed_z = self.embed_z_scale * (self.interpreter_template.get_tensor(self.template_output_details[0]['index']).astype(np.float32)  - self.embed_z_offset)
+      #print("embed z : {}".format(embed_z))
 
-        dt1 = datetime.datetime.now()
-        self.interpreter.invoke()
-        dt2 = datetime.datetime.now()
-        print("inference du: {}".format(dt2.timestamp() - dt1.timestamp()))
+      if self.embed_x_scale == 1:
+        search_image = search_image.astype(np.float32)
+      dt1 = datetime.datetime.now()
+      self.interpreter_search.set_tensor(self.search_input_details[0]['index'], search_image)
+      self.interpreter_search.invoke()
+      dt2 = datetime.datetime.now()
+      print("search inference du: {}".format(dt2.timestamp() - dt1.timestamp()))
+      embed_x = self.embed_x_scale * (self.interpreter_search.get_tensor(self.search_output_details[0]['index']).astype(np.float32)  - self.embed_x_offset)
+      #print("embed x : {}".format(embed_x))
 
-        raw_output_data = self.interpreter.get_tensor(self.lite_output_details[0]['index'])
-        print(self.lite_output_details[0])
-        print(raw_output_data)
-        raise ValueError("test")
+      if self.cross_input_template_scale != 1 and self.cross_input_search_scale != 1:
+        embed_z = (embed_z / self.cross_input_template_scale + self.cross_input_template_offset).astype(np.uint8)
+        embed_x = (embed_x / self.cross_input_search_scale + self.cross_input_search_offset).astype(np.uint8)
 
-        # post-processing for upsampling the result
-        response = cv2.resize(raw_output_data, dsize=None, fx=self.track_config['upsample_factor'], fy=self.track_config['upsample_factor'], interpolation=cv2.INTER_CUBIC)
+      dt1 = datetime.datetime.now()
+      self.interpreter_cross.set_tensor(self.cross_input_details[0]['index'], embed_z)
+      self.interpreter_cross.set_tensor(self.cross_input_details[1]['index'], embed_x)
+      self.interpreter_cross.invoke()
+      dt2 = datetime.datetime.now()
+      print("cross inference du: {}".format(dt2.timestamp() - dt1.timestamp()))
+      raw_output_data = self.cross_output_scale * (self.interpreter_cross.get_tensor(self.cross_output_details[0]['index']) - self.cross_output_offset)
 
-      else:
-        output_tensor = self.graph.get_tensor_by_name("import/upsample/final_result:0")
-        dt1 = datetime.datetime.now()
-        response = self.sess.run(output_tensor, feed_dict = {"import/template_image:0": template_image, "import/input_image:0": search_image})
-        dt2 = datetime.datetime.now()
-        print("inference du: {}".format(dt2.timestamp() - dt1.timestamp()))
+      print("cross correlation : {}".format(raw_output_data))
+      raise ValueError("test")
+
+      # post-processing for upsampling the result
+      response = cv2.resize(raw_output_data, dsize=None, fx=self.track_config['upsample_factor'], fy=self.track_config['upsample_factor'], interpolation=cv2.INTER_CUBIC)
 
 
       with np.errstate(all='raise'):  # Raise error if something goes wrong
@@ -251,18 +282,21 @@ class SiameseTracking():
 if __name__ == "__main__":
 
   parser = argparse.ArgumentParser(description='')
-  parser.add_argument('--model', dest='model_filepath', action="store",
-                      help='the path of frozen graph model for inference', default='inference_model/frozen_graph.pb', type=str)
+  parser.add_argument('--models_dir', dest='models_dir', action="store",
+                      default='Logs/SiamFC/track_model_checkpoints/SiamFC-3s-color-pretrained/models', type=str)
+  parser.add_argument('--search_model', dest='search_model', action="store",
+                      default='converted_model_search_feature_extractor.tflite', type=str)
+  parser.add_argument('--template_model', dest='template_model', action="store",
+                      default='converted_model_template_feature_extractor.tflite', type=str)
+  parser.add_argument('--cross_model', dest='cross_model', action="store",
+                      default='converted_model_cross_correlation.tflite', type=str)
+
   parser.add_argument('--config', dest='config_filepath', action="store",
                       help='the path of tracking config for inference', default='Logs/SiamFC/track_model_checkpoints/SiamFC-3s-color-pretrained', type=str)
 
   parser.add_argument('--images', dest='image_filepath', action="store",
                       help='the path of iamges to do inference', default='assets/drone', type=str)
 
-  parser.add_argument('--lite', dest='lite', action="store_true", help='whether use tensorflow lite model')
-  parser.add_argument('--full_quant', dest='full_quant', action="store_true", help='full quantization')
-
-  parser.add_argument('--edgetpu', dest='edgetpu', action="store_true", help='use edgetpu')
   parser.add_argument('--headless', dest='headless', action="store_true")
 
   args, _ = parser.parse_known_args()
@@ -271,7 +305,7 @@ if __name__ == "__main__":
   bbox = [int(v) for v in first_line.strip().split(',')]
   init_bbox = Rectangle(bbox[0], bbox[1], bbox[2], bbox[3])  # 0-index in python
 
-  tracker = SiameseTracking(args.model_filepath, args.config_filepath, args.lite, args.full_quant, args.edgetpu, init_bbox)
+  tracker = SiameseTracking(args.models_dir, args.template_model, args.search_model, args.cross_model, args.config_filepath, init_bbox)
 
   filenames = sort_nicely(glob(args.image_filepath + '/img/*.jpg'))
 

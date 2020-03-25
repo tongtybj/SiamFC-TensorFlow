@@ -10,7 +10,8 @@
 
 import numbers
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+#import tensorflow as tf
 
 
 class Compose(object):
@@ -63,7 +64,7 @@ class CenterCrop(object):
 
   def __call__(self, img):
     th, tw = self.size
-    return tf.compat.v1.image.resize_image_with_crop_or_pad(img, th, tw)
+    return tf.image.resize_image_with_crop_or_pad(img, th, tw)
 
 
 class RandomCrop(object):

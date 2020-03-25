@@ -169,18 +169,23 @@ SiamFC-TensorFlow is released under the MIT License (refer to the LICENSE file f
   ```
   $ python scripts/export_siamese_fc_model.py
   ```
-- exporint from scratch training model :
+- export from scratch training model :
   ```
   $ python scripts/export_siamese_fc_model.py --checkpoint_dir=Logs/SiamFC/track_model_checkpoints/SiamFC-3s-color-scratch
   ```
 
-- export fullly quantized tflite model, need tf-2.1.0 (version < 2.1.0 does no support the quantization of SPLIT)
+- export fully quantized tflite model, need tf-2.1.0 (version < 2.1.0 does no support the quantization of SPLIT)
   ```
   $ pip install pip install tensorflow-gpu==2.1.0
   $ python scripts/export_siamese_fc_model.py
   ```
   **note**: you have to install [tf-slim](converted_model_full_quant.tflite)
-  
+
+- export seperate model
+  1. tempalte feature extractor: TODO (use `scripts/export_siamese_fc_model.py`)
+  2. search feature extractor: TODO (use `scripts/export_siamese_fc_model.py`)
+  3. cross-correlation: `$ python scripts/export_siamese_fc_model_cross_correlation.py --checkpoint_dir=Logs/SiamFC/track_model_checkpoints/SiamFC-3s-color-pretrained`
+
 - tracking from frozen graph
   ```
   $ python scripts/tracking_from_frozen_graph.py (~0.02s in GTX1080Ti)
@@ -204,6 +209,12 @@ SiamFC-TensorFlow is released under the MIT License (refer to the LICENSE file f
   ```
   $ python scripts/tracking_from_frozen_graph.py --model=inference_model/converted_model_full_quant.tflite --lite=True --full_quant=True
   ```
+
+- tracking using seperate model:
+  ```
+  $ python scripts/tracking_separate.py --headless
+  ```
+  **note**: fastest way: `$ python scripts/tracking_separate.py --headless --cross_model=converted_model_cross_correlation.tflite --search_mode=converted_model_full_quant_search_feature_extractor_edgetpu.tflite --template_mode=converted_model_template_feature_extractor.tflite`
 
 - Note:
 1. tensorflow lite quantization:

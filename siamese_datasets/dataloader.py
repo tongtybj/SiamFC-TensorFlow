@@ -14,6 +14,7 @@ from __future__ import division
 from __future__ import print_function
 
 import logging
+import itertools
 
 import tensorflow.compat.v1 as tf
 
@@ -65,40 +66,40 @@ class DataLoader(object):
     self.build_dataset()
     self.build_iterator()
 
+  def transform_fn(self, video):
+    exemplar_file = tf.read_file(video[0])
+    instance_file = tf.read_file(video[1])
+    exemplar_image = tf.image.decode_jpeg(exemplar_file, channels=3, dct_method="INTEGER_ACCURATE")
+    instance_image = tf.image.decode_jpeg(instance_file, channels=3, dct_method="INTEGER_ACCURATE")
+
+    if self.v_transform is not None:
+      video = tf.stack([exemplar_image, instance_image])
+      video = self.v_transform(video)
+      exemplar_image = video[0]
+      instance_image = video[1]
+
+    if self.z_transform is not None:
+      exemplar_image = self.z_transform(exemplar_image)
+
+    if self.x_transform is not None:
+      instance_image = self.x_transform(instance_image)
+
+    return exemplar_image, instance_image
+
   def build_dataset(self):
     def sample_generator():
       for video_id in self.sampler:
         sample = self.dataset_py[video_id]
         yield sample
 
-    def transform_fn(video):
-      exemplar_file = tf.read_file(video[0])
-      instance_file = tf.read_file(video[1])
-      exemplar_image = tf.image.decode_jpeg(exemplar_file, channels=3, dct_method="INTEGER_ACCURATE")
-      instance_image = tf.image.decode_jpeg(instance_file, channels=3, dct_method="INTEGER_ACCURATE")
-
-      if self.v_transform is not None:
-        video = tf.stack([exemplar_image, instance_image])
-        video = self.v_transform(video)
-        exemplar_image = video[0]
-        instance_image = video[1]
-
-      if self.z_transform is not None:
-        exemplar_image = self.z_transform(exemplar_image)
-
-      if self.x_transform is not None:
-        instance_image = self.x_transform(instance_image)
-
-      return exemplar_image, instance_image
-
     # https://qiita.com/S-aiueo32/items/c7e86ef6c339dfb013ba
     # TODO: except tf.errors.OutOfRangeError: # 末尾まで行ったらループを抜ける
     dataset = tf.data.Dataset.from_generator(sample_generator,
-                                                       output_types=(tf.string),
-                                                       output_shapes=(tf.TensorShape([2])))
+                                             output_types=(tf.string),
+                                             output_shapes=(tf.TensorShape([2])))
     # prefecth, thread: http://tensorflow.classcat.com/2019/03/23/tf20-alpha-guide-data-performance/
     # https://www.tensorflow.org/tutorials/load_data/images?hl=ja
-    dataset = dataset.map(transform_fn, num_parallel_calls=self.config['prefetch_threads'])
+    dataset = dataset.map(self.transform_fn, num_parallel_calls=self.config['prefetch_threads'])
     dataset = dataset.prefetch(self.config['prefetch_capacity'])
     dataset = dataset.repeat()
     dataset = dataset.batch(self.config['batch_size'])
@@ -108,6 +109,25 @@ class DataLoader(object):
   def build_iterator(self):
       self.iterator = self.dataset_tf.make_one_shot_iterator()
 
-
   def get_one_batch(self):
     return self.iterator.get_next()
+
+  def build_eager_dataset(self):
+
+    def sample_generator():
+      for video_id in self.sampler:
+      #for video_id in itertools.count(1):
+        print("===== smaple generator")
+        sample = self.dataset_py[video_id]
+        print(sample)
+        exemplar_image, instance_image = self.transform_fn(sample)
+        print(exemplar_image.shape)
+        print(instance_image.shape)
+
+        yield exemplar_image, instance_image
+
+    self.dataset_tf = tf.data.Dataset.from_generator(sample_generator,
+                                                     output_types=(tf.string),
+                                                     output_shapes=(tf.TensorShape([2])))
+
+    return self.dataset_tf
