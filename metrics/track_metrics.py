@@ -5,8 +5,8 @@
 #
 # Distributed under terms of the MIT license.
 
-
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+#import tensorflow as tf
 from tensorflow.python.framework import ops
 from tensorflow.python.ops.metrics_impl import _confusion_matrix_at_thresholds
 

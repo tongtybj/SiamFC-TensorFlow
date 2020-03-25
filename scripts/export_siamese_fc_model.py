@@ -25,15 +25,15 @@ from embeddings.convolutional_alexnet import convolutional_alexnet_arg_scope, co
 from utils.misc_utils import load_cfgs
 from siamese_datasets.dataloader import DataLoader
 
-from nets import mobilenet_v1
+tf.enable_eager_execution()
+tensorflow.executing_eagerly()
 
-from tensorflow.contrib import quantize as contrib_quantize
-
-#tensorflow.enable_eager_execution()
 
 TF_MAJOR_VERSION = int(tf.__version__.split(".")[0])
 if TF_MAJOR_VERSION == 1:
     import tensorflow.contrib.slim as slim
+    from nets import mobilenet_v1
+    from tensorflow.contrib import quantize as contrib_quantize
 else:
     import tf_slim as slim
     tf.disable_v2_behavior()
@@ -45,9 +45,6 @@ class ExportInferenceModel():
         self.model_save_dir = osp.join(self.checkpoint_dir, 'models')
         self.model_config, self.train_config, self.track_config = load_cfgs(self.checkpoint_dir)
 
-        self.dataloader = DataLoader(self.train_config['validation_data_config'], False)
-        self.dataloader.build()
-
         size_z = self.model_config['z_image_size']
         size_x = self.track_config['x_image_size']
 
@@ -55,6 +52,9 @@ class ExportInferenceModel():
         self.train_config['validation_data_config']["batch_size"] = 1
         self.train_config['validation_data_config']["prefetch_capacity"] = 0 # no need to prefetch
         print("batch.size: {}".format(self.train_config['validation_data_config'].get("batch_size")))
+
+        tf.enable_eager_execution() # the position of this is very important!!!!, can not be outside
+
         with tf.Session() as sess:
             template_image = tf.placeholder(tf.float32, shape=[size_z, size_z, 3], name='template_image')
             input_image = tf.placeholder(tf.float32, shape=[size_x, size_x, 3], name='input_image')
@@ -83,6 +83,8 @@ class ExportInferenceModel():
             else:
               raise ValueError("Invalid feature extractor: {}".format(feature_extactor))
 
+            #embed_z = tf.placeholder(tf.float32, shape=[1, 6, 6, 256], name='embed_z')
+            #embed_x = tf.placeholder(tf.float32, shape=[1, 22, 22, 256], name='embed_x')
             # build cross-correlation between features from template image and input image
             with tf.variable_scope('detection'):
                 embed_z = tf.squeeze(embed_z, 0)  # [filter_height, filter_width, in_channels]
@@ -108,7 +110,7 @@ class ExportInferenceModel():
             # https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet/mobilenet_example.ipynb
             ema = tf.train.ExponentialMovingAverage(0)
             variables_to_restore = ema.variables_to_restore(moving_avg_variables=[])
-            saver = tf.train.Saver(tf.global_variables())
+            saver = tf.train.Saver(variables_to_restore)
 
             if osp.isdir(self.checkpoint_dir):
               checkpoint = tf.train.latest_checkpoint(self.checkpoint_dir)
@@ -125,12 +127,8 @@ class ExportInferenceModel():
             #writer = tf.summary.FileWriter(logdir="./inference_model", graph=tf.get_default_graph())
             ''' unncessary debug part'''
             '''
-            variables_to_restore = []
             for op in tf.get_default_graph().get_operations():
                 print(op.name, op.op_def.name)
-                if op.op_def and 'Variable' in op.op_def.name:
-                    variables_to_restore.append(op.name)
-
             for var in tf.global_variables():
                 print (var.name)
                 #if "convolutional_alexnet/conv1/weights" in var.name:
@@ -140,7 +138,6 @@ class ExportInferenceModel():
 
             # extract frozed graph
             # http://workpiles.com/2016/07/tensorflow-protobuf-dump/
-            # frozen_graph_def = graph_util.convert_variables_to_constants(sess, tf.get_default_graph().as_graph_def(), ["convolutional_alexnet/conv5/concat", "convolutional_alexnet_1/conv5/concat"])
             frozen_graph_def = tf.graph_util.convert_variables_to_constants(sess, tf.get_default_graph().as_graph_def(), ["upsample/final_result"])
 
             frozen_graph = tf.Graph()
@@ -149,44 +146,51 @@ class ExportInferenceModel():
                 writer = tf.summary.FileWriter(logdir=self.model_save_dir, graph=frozen_graph)
                 tf.train.write_graph(frozen_graph_def, self.model_save_dir, 'frozen_graph.pb', as_text=False)
 
-                # tensorflow lite
+        # tensorflow lite
 
-                # we do not add the last upsample operation in tensorflow since this should be implemented in customized operation. Too much cost, and this is easy to implement in CPU process.
-                converter = tf.lite.TFLiteConverter.from_frozen_graph(osp.join(self.model_save_dir, 'frozen_graph.pb'), ['template_image', 'input_image'], ['detection/add'])
+        # we do not add the last upsample operation in tensorflow since this should be implemented in customized operation. Too much cost, and this is easy to implement in CPU process.
+        converter = tf.lite.TFLiteConverter.from_frozen_graph(osp.join(self.model_save_dir, 'frozen_graph.pb'), ['template_image', 'input_image'], ['detection/add'])
+        #converter = tf.lite.TFLiteConverter.from_frozen_graph(osp.join(self.model_save_dir, 'frozen_graph.pb'), ['input_image'], ['convolutional_alexnet/conv5/concat'])
+        #converter = tf.lite.TFLiteConverter.from_frozen_graph(osp.join(self.model_save_dir, 'frozen_graph.pb'), ['template_image'], ['convolutional_alexnet_1/conv5/concat'])
 
-                '''
-                # https://www.tensorflow.org/api_docs/python/tf/compat/v1/lite/TFLiteConverter#from_frozen_graph
-                converter.allow_custom_ops = True
-                '''
-                converter.dump_graphviz_dir = './inference_model'
-                tflite_model = converter.convert()
-                open(osp.join(self.model_save_dir, 'converted_model.tflite'), "wb").write(tflite_model)
 
-                return
+        '''
+        # https://www.tensorflow.org/api_docs/python/tf/compat/v1/lite/TFLiteConverter#from_frozen_graph
+        converter.allow_custom_ops = True
+        '''
+        converter.dump_graphviz_dir = './inference_model'
+        tflite_model = converter.convert()
+        open(osp.join(self.model_save_dir, 'converted_model.tflite'), "wb").write(tflite_model)
+        #open(osp.join(self.model_save_dir, 'converted_model_search_feature_extractor.tflite'), "wb").write(tflite_model)
+        #open(osp.join(self.model_save_dir, 'converted_model_template_feature_extractor.tflite'), "wb").write(tflite_model)
 
-                # quantization: https://arxiv.org/pdf/1712.05877.pdf
-                # only weigh quatization is very slow x5
-                converter.optimizations = [tf.lite.Optimize.OPTIMIZE_FOR_SIZE]
-                tflite_model = converter.convert()
-                open(osp.join(self.model_save_dir, 'converted_model_weight_quant.tflite'), "wb").write(tflite_model)
+        # quantization: https://arxiv.org/pdf/1712.05877.pdf
+        # only weigh quatization is very slow x5
+        converter.optimizations = [tf.lite.Optimize.OPTIMIZE_FOR_SIZE]
+        #tflite_model = converter.convert()
+        #open(osp.join(self.model_save_dir, 'converted_model_weight_quant.tflite'), "wb").write(tflite_model)
 
-                # fully quantized
-                #tf.executing_eagerly()
+        # fully quantized
+        def representative_data_gen():
+          dataloader = DataLoader(self.train_config['validation_data_config'], False)
+          dataloader.build()
 
-                def representative_data_gen():
-                    for i in range(300):
-                        exemplar_op, instance_op = self.dataloader.get_one_batch()
-                        exemplar, instance = sess.run([exemplar_op, instance_op])
-                        #exemplar, instance = self.dataloader.get_one_batch()
+          # https://www.tensorflow.org/api_docs/python/tf/data/Dataset#from_generator
+          for _ in range(300):
+            exemplar, instance = dataloader.get_one_batch()
 
-                        yield [exemplar[0].astype(np.float32), instance[0].astype(np.float32)]
+            yield [exemplar.numpy()[0].astype(np.float32), instance.numpy()[0].astype(np.float32)]
+            #yield [instance.numpy()[0].astype(np.float32)]
+            #yield [exemplar.numpy()[0].astype(np.float32)]
 
-                converter.representative_dataset = representative_data_gen
-                converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
-                converter.inference_input_type = tf.uint8
-                converter.inference_output_type = tf.uint8
-                tflite_model = converter.convert()
-                open(osp.join(self.model_save_dir, 'converted_model_full_quant.tflite'), "wb").write(tflite_model)
+        converter.representative_dataset = representative_data_gen
+        converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
+        converter.inference_input_type = tf.uint8
+        converter.inference_output_type = tf.uint8
+        tflite_model = converter.convert()
+        open(osp.join(self.model_save_dir, 'converted_model_full_quant.tflite'), "wb").write(tflite_model)
+        #open(osp.join(self.model_save_dir, 'converted_model_full_quant_search_feature_extractor.tflite'), "wb").write(tflite_model)
+        #open(osp.join(self.model_save_dir, 'converted_model_full_quant_template_feature_extractor.tflite'), "wb").write(tflite_model)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='')

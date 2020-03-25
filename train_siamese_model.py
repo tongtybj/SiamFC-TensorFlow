@@ -19,7 +19,8 @@ import time
 from datetime import datetime
 
 import numpy as np
-import tensorflow as tf
+import tensorflow
+import tensorflow.compat.v1 as tf
 from sacred import Experiment
 from sacred.observers import FileStorageObserver
 
@@ -123,7 +124,7 @@ def main(model_config, train_config, track_config):
     # general way for run train: https://qiita.com/horiem/items/00ec6488b23895cc4fe2
     # tensorflow 2.1: https://www.tensorflow.org/tutorials/customization/custom_training_walkthrough
     # Set up the training ops
-    opt_op = tf.contrib.layers.optimize_loss(
+    opt_op = tensorflow.contrib.layers.optimize_loss(
       loss=model.total_loss,
       global_step=model.global_step,
       learning_rate=learning_rate,

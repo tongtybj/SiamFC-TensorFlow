@@ -20,15 +20,14 @@ from metrics.track_metrics import center_dist_error, center_score_error
 from utils.train_utils import construct_gt_score_maps, load_mat_model
 from siamese_datasets.dataloader import DataLoader
 
-from tensorflow.contrib import quantize as contrib_quantize
-
 TF_MAJOR_VERSION = [ int(num) for num in tf.__version__.split('.')][0]
 if TF_MAJOR_VERSION == 1:
     import tensorflow.contrib.slim as slim
+    from tensorflow.contrib import quantize as contrib_quantize
+    from nets import mobilenet_v1
 else:
     import tf_slim as slim
 
-from nets import mobilenet_v1
 
 class SiameseModel:
   def __init__(self, model_config, train_config, track_config, mode='train'):
