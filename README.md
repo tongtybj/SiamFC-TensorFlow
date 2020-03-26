@@ -224,3 +224,5 @@ SiamFC-TensorFlow is released under the MIT License (refer to the LICENSE file f
 
 
 3. install tensorflow/models/resaerch/slim with `pip install -e .` (setup.py)
+
+4. for mobilnet, please use tf 1.x (e.g. 1.5.0) also the frozen graph export, but for tflite conversion, please use tf 2.x (2.1.0)

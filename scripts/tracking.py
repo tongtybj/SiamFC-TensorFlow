@@ -13,9 +13,9 @@ import argparse
 import collections
 import tensorflow.compat.v1 as tf
 #import tensorflow as tf
+import cv2
 import json
 import numpy as np
-import cv2
 import datetime
 
 import tflite_runtime.interpreter as tflite
@@ -46,18 +46,36 @@ def convert_bbox_format(bbox, to):
 class TargetState(object):
   """Represent the target state."""
 
-  def __init__(self, bbox, search_pos):
+  def __init__(self, bbox, search_pos, scale_idx):
     self.bbox = bbox  # (cx, cy, w, h) in the original image
     self.search_pos = search_pos  # target center position in the search image
-    #self.scale_idx = scale_idx  # scale index in the searched scales
+    self.scale_idx = scale_idx  # scale index in the searched scales
 
 class SiameseTracking():
-    def __init__(self, model_filepath, config_filepath, lite, full_quant, edgetpu, init_bb):
+    def __init__(self, model_filepath, config_filepath):
 
-        self.lite = lite
-        self.full_quant = full_quant
+        self.lite = False
+        self.full_quant = False
+        self.edgetpu = False
+        self.num_scales = 1
+
+        # check the model file
+        if ".pb" in args.model_filepath:
+          print("load frozen graph model")
+        elif ".tflite" in args.model_filepath:
+          self.lite = True
+          print("load tensorflow lite model")
+          if "full_quant" in args.model_filepath:
+            self.full_quant = True
+            print("this model is fully quantized")
+          if "edgetpu" in args.model_filepath:
+            self.edgetpu = True
+            print("this model is for edgetpu")
+        else:
+          raise ValueError("test")
+
         if self.lite == True:
-          if edgetpu:
+          if self.edgetpu:
             self.interpreter = tflite.Interpreter(model_path=model_filepath, experimental_delegates=[tflite.load_delegate('libedgetpu.so.1')])
           else:
             self.interpreter = tflite.Interpreter(model_path=model_filepath)
@@ -65,6 +83,10 @@ class SiameseTracking():
           self.interpreter.allocate_tensors()
           self.lite_input_details = self.interpreter.get_input_details()
           self.lite_output_details = self.interpreter.get_output_details()
+          for input in self.lite_input_details:
+            if input['name'] == "input_image":
+              self.num_scales = input['shape'][0]
+          print("=========== the scale number of model: {}".format(self.num_scales))
         else:
           print('Loading frozen graphmodel...')
           self.graph = tf.Graph()
@@ -75,7 +97,10 @@ class SiameseTracking():
 
             for n in graph_def.node:
               if n.op in ('Placeholder'):
-                print("placeholder: {}".format(n.name))
+                if n.name == "input_image":
+                  self.num_scales = n.attr['shape'].shape.dim[0].size
+
+            print("=========== the scale number of model: {}".format(self.num_scales))
 
           with self.graph.as_default():
             tf.import_graph_def(graph_def)
@@ -99,6 +124,10 @@ class SiameseTracking():
         self.original_target_height = 0
         self.original_target_width = 0
 
+        scales = np.arange(self.num_scales) - get_center(self.num_scales)
+        assert np.sum(scales) == 0, 'scales should be symmetric'
+        self.search_factors = [self.track_config['scale_step'] ** x for x in scales]
+
     def update_template_image(self, input_image, target_bbox):
 
       bbox = convert_bbox_format(target_bbox, 'center-based')
@@ -106,17 +135,21 @@ class SiameseTracking():
       self.original_target_height = bbox.height
       self.original_target_width = bbox.width
 
-      search_image, _ = self.crop_search_image(input_image, bbox)
+      search_images, _ = self.crop_search_image(input_image, bbox)
+      print(len(search_images))
       # Given the fix ratio btween template image (127) and input image (255) => 1:2
       top = int(round(self.search_center[1] - get_center(self.template_image_size)))
       bottom = int(top + self.template_image_size)
       left = int(round(self.search_center[0] - get_center(self.template_image_size)))
       right = int(left + self.template_image_size)
 
-      template_image = search_image[top:bottom, left:right]
+      template_image = search_images[int(get_center(self.num_scales))][top:bottom, left:right]
+      print("template_image: {}".format(template_image.shape))
 
       # Update the current_target_state
-      self.current_target_state = TargetState(bbox=bbox, search_pos=self.search_center)
+      self.current_target_state = TargetState(bbox=bbox,
+                                              search_pos=self.search_center,
+                                              scale_idx=int(get_center(self.num_scales)))
 
       if self.full_quant == True:
         return template_image.astype(np.uint8)
@@ -128,55 +161,72 @@ class SiameseTracking():
       target_size = np.array([target_bbox.height, target_bbox.width])
 
       avg_chan = (np.average(input_image, axis=(0, 1))).astype(np.uint8)
-      canonical_size = np.sqrt(np.prod(target_size + 0.5 * np.sum(target_size)))
+      # TODO: to understand the effect of this factor (to much margin from the template image, why_)
+      #canonical_size = np.sqrt(np.prod(target_size + 0.5 * np.sum(target_size))) # what is this ?
+      canonical_size = np.sqrt(np.prod(target_size + 0.5 * np.sum(target_size))) # what is this ?
+      #canonical_size = np.max(target_size) not good for ball, why ?
 
       search_window_size = self.search_image_size / self.template_image_size * canonical_size
       search_resize_rate = self.search_image_size / search_window_size
 
-      topleft = (target_yx - get_center(search_window_size))
-      bottomright = (target_yx + get_center(search_window_size))
+      print("search_window_size: {}".format(search_window_size))
 
-      search_image = np.ones((int(search_window_size), int(search_window_size), 3))
-      for i in range(len(avg_chan)):
-        search_image[:,:,i] = search_image[:,:,i] * avg_chan[i]
+      search_images = []
+      search_resize_rates = []
 
-      bottomright = bottomright.astype(np.uint32)
-      topleft = topleft.astype(np.uint32)
-      init_x = 0
-      init_y = 0
-      if topleft[0] < 0: # top
-        init_y = -topleft[0]
-        topleft[0] = 0
-      if topleft[1] < 0: # left
-        init_x = -topleft[1]
-        topleft[1] = 1
-      if bottomright[0] >= input_image.shape[0]: # bottom
-        bottomright[0] = input_image.shape[0] - 1
-      if bottomright[1] >= input_image.shape[1]: # right
-        bottomright[1] = input_image.shape[1] - 1
-      print ("topleft: {}".format(topleft))
-      print ("bottomright: {}".format(bottomright))
+      for factor in self.search_factors:
+        scaled_search_window_size = factor * search_window_size
+        topleft = (target_yx - get_center(scaled_search_window_size))
+        bottomright = (target_yx + get_center(scaled_search_window_size))
 
-      search_image[init_y: bottomright[0] - topleft[0], init_x: bottomright[1] - topleft[1],:] = input_image[topleft[0]:bottomright[0], topleft[1]:bottomright[1],:]
+        search_image = np.ones((int(scaled_search_window_size), int(scaled_search_window_size), 3))
+        for i in range(len(avg_chan)):
+          search_image[:,:,i] = search_image[:,:,i] * avg_chan[i]
 
-      search_image = cv2.resize(search_image, (self.search_image_size, self.search_image_size))
+        bottomright = bottomright.astype(np.int32)
+        topleft = topleft.astype(np.int32)
+        init_x = 0
+        init_y = 0
+        if topleft[0] < 0: # top
+          init_y = -topleft[0]
+          topleft[0] = 0
+          print ("top violate")
+        if topleft[1] < 0: # left
+          init_x = -topleft[1]
+          topleft[1] = 0
+          print ("left violate")
+        if bottomright[0] >= input_image.shape[0]: # bottom
+          bottomright[0] = input_image.shape[0] - 1
+        if bottomright[1] >= input_image.shape[1]: # right
+          bottomright[1] = input_image.shape[1] - 1
 
-      if self.full_quant == True:
-        return search_image.astype(np.uint8), search_resize_rate
-      else:
-        return search_image.astype(np.float32), search_resize_rate
+        # print ("topleft for factor{}: {}".format(factor, topleft))
+        # print ("bottomright for factor{}: {}".format(factor, bottomright))
+
+        search_image[init_y: init_y + bottomright[0] - topleft[0], init_x: init_x + bottomright[1] - topleft[1],:] = input_image[topleft[0]:bottomright[0], topleft[1]:bottomright[1],:]
+
+        search_image = cv2.resize(search_image, (self.search_image_size, self.search_image_size))
+
+        if self.full_quant == True:
+          search_images.append(search_image.astype(np.uint8))
+        else:
+          search_images.append(search_image.astype(np.float32))
+
+        search_resize_rates.append(search_resize_rate/factor)
+
+      return search_images, search_resize_rates
 
     def inference(self, template_image, input_image):
 
-      search_image, search_resize_rate  = self.crop_search_image(input_image, self.current_target_state.bbox)
+      search_images, search_resize_rates  = self.crop_search_image(input_image, self.current_target_state.bbox)
+      # search_image = np.stack([search_image for _ in range(self.num_scales)]) # test
 
       response = None
+      best_scale_index = 0
       if self.lite == True:
         # https://www.tensorflow.org/lite/guide/inference
         self.interpreter.set_tensor(self.lite_input_details[0]['index'], template_image)
-        self.interpreter.set_tensor(self.lite_input_details[1]['index'], search_image)
-
-        #self.interpreter.set_tensor(self.lite_input_details[0]['index'], search_image)
+        self.interpreter.set_tensor(self.lite_input_details[1]['index'], search_images)
 
         dt1 = datetime.datetime.now()
         self.interpreter.invoke()
@@ -184,20 +234,40 @@ class SiameseTracking():
         print("inference du: {}".format(dt2.timestamp() - dt1.timestamp()))
 
         raw_output_data = self.interpreter.get_tensor(self.lite_output_details[0]['index'])
-        print(self.lite_output_details[0])
-        print(raw_output_data)
-        raise ValueError("test")
+
+        #raise ValueError("test")
 
         # post-processing for upsampling the result
-        response = cv2.resize(raw_output_data, dsize=None, fx=self.track_config['upsample_factor'], fy=self.track_config['upsample_factor'], interpolation=cv2.INTER_CUBIC)
+        response = np.empty((self.num_scales, self.track_config['upsample_factor'] * raw_output_data.shape[1], self.track_config['upsample_factor'] * raw_output_data.shape[1]))
+
+        for i in range(self.num_scales):
+          response[i] = cv2.resize(np.squeeze(raw_output_data, -1)[i], dsize=None, fx=self.track_config['upsample_factor'], fy=self.track_config['upsample_factor'], interpolation=cv2.INTER_CUBIC)
 
       else:
         output_tensor = self.graph.get_tensor_by_name("import/upsample/final_result:0")
         dt1 = datetime.datetime.now()
-        response = self.sess.run(output_tensor, feed_dict = {"import/template_image:0": template_image, "import/input_image:0": search_image})
+        response = self.sess.run(output_tensor, feed_dict = {"import/template_image:0": template_image, "import/input_image:0": search_images})
         dt2 = datetime.datetime.now()
+        #print(np.squeeze(response))
+        #print(response.shape)
+        response = np.squeeze(response, -1)
+        #raise ValueError("test")
+
         print("inference du: {}".format(dt2.timestamp() - dt1.timestamp()))
 
+      # Choose the scale whole response map has the highest peak
+      best_scale = 0
+      if self.num_scales > 1:
+        response_max = np.max(response, axis=(1, 2))
+        penalties = self.track_config['scale_penalty'] * np.ones(self.num_scales)
+        current_scale_idx = int(get_center(self.num_scales))
+        penalties[current_scale_idx] = 1.0
+        response_penalized = response_max * penalties
+        #print(response_penalized)
+        best_scale = np.argmax(response_penalized)
+
+      print(best_scale)
+      response = np.squeeze(response[best_scale])
 
       with np.errstate(all='raise'):  # Raise error if something goes wrong
         response = response - np.min(response)
@@ -205,10 +275,10 @@ class SiameseTracking():
 
       if self.window is None:
         window = np.dot(np.expand_dims(np.hanning(response.shape[1]), 1),
-                          np.expand_dims(np.hanning(response.shape[1]), 0))
+                        np.expand_dims(np.hanning(response.shape[1]), 0))
         self.window = window / np.sum(window)  # normalize window
 
-        response = (1 - self.window_influence) * response + self.window_influence * self.window
+      response = (1 - self.window_influence) * response + self.window_influence * self.window
 
       # Find maximum response
       r_max, c_max = np.unravel_index(response.argmax(), response.shape)
@@ -223,7 +293,7 @@ class SiameseTracking():
       # ... in instance input ...
       disp_instance_input = disp_instance_feat * self.model_config['embed_config']['stride']
       # ... in instance original crop (in frame coordinates)
-      disp_instance_frame = disp_instance_input / search_resize_rate
+      disp_instance_frame = disp_instance_input / search_resize_rates[best_scale]
       # Position within frame in frame coordinates
       y = self.current_target_state.bbox.y
       x = self.current_target_state.bbox.x
@@ -232,37 +302,32 @@ class SiameseTracking():
 
       # Target scale damping and saturation
       target_scale = self.current_target_state.bbox.height / self.original_target_height
-      '''
       search_factor = self.search_factors[best_scale]
       scale_damp = self.track_config['scale_damp']  # damping factor for scale update
       target_scale *= ((1 - scale_damp) * 1.0 + scale_damp * search_factor)
-      target_scale = np.maximum(0.2, np.minimum(5.0, target_scale))
-      '''
+      target_scale = np.maximum(0.2, np.minimum(5.0, target_scale)) # heuristic
 
       # Some book keeping
       height = self.original_target_height * target_scale
       width = self.original_target_width * target_scale
       self.current_target_state.bbox = Rectangle(x, y, width, height)
+      self.current_target_state.scale_idx = best_scale
       self.current_target_state.search_pos = self.search_center + disp_instance_input
 
-      outputs = {'search_image': search_image, 'response': response, 'current_target_state': self.current_target_state}
+      outputs = {'search_image': search_images[best_scale_index], 'response': response, 'current_target_state': self.current_target_state}
       return outputs
 
 if __name__ == "__main__":
 
   parser = argparse.ArgumentParser(description='')
   parser.add_argument('--model', dest='model_filepath', action="store",
-                      help='the path of frozen graph model for inference', default='inference_model/frozen_graph.pb', type=str)
+                      help='the path of frozen graph model for inference', default='Logs/SiamFC/track_model_checkpoints/SiamFC-3s-color-pretrained/models/whole_model_scale1.pb', type=str)
   parser.add_argument('--config', dest='config_filepath', action="store",
                       help='the path of tracking config for inference', default='Logs/SiamFC/track_model_checkpoints/SiamFC-3s-color-pretrained', type=str)
 
   parser.add_argument('--images', dest='image_filepath', action="store",
                       help='the path of iamges to do inference', default='assets/drone', type=str)
 
-  parser.add_argument('--lite', dest='lite', action="store_true", help='whether use tensorflow lite model')
-  parser.add_argument('--full_quant', dest='full_quant', action="store_true", help='full quantization')
-
-  parser.add_argument('--edgetpu', dest='edgetpu', action="store_true", help='use edgetpu')
   parser.add_argument('--headless', dest='headless', action="store_true")
 
   args, _ = parser.parse_known_args()
@@ -271,7 +336,7 @@ if __name__ == "__main__":
   bbox = [int(v) for v in first_line.strip().split(',')]
   init_bbox = Rectangle(bbox[0], bbox[1], bbox[2], bbox[3])  # 0-index in python
 
-  tracker = SiameseTracking(args.model_filepath, args.config_filepath, args.lite, args.full_quant, args.edgetpu, init_bbox)
+  tracker = SiameseTracking(args.model_filepath, args.config_filepath)
 
   filenames = sort_nicely(glob(args.image_filepath + '/img/*.jpg'))
 
@@ -280,9 +345,12 @@ if __name__ == "__main__":
 
   if not args.headless:
     cv2.imshow('template_image',template_image.astype(np.uint8))
+    #first_image = cv2.rectangle(first_image,(int(init_bbox.x), int(init_bbox.y)),(int(init_bbox.x+init_bbox.width), int(init_bbox.y+init_bbox.height)),(0,255,0),2)
+    #cv2.imshow('first_image', first_image.astype(np.uint8))
+
 
   for i, filename in enumerate(filenames):
-    if i > 0:
+    if i >= 0:
       input_image = cv2.imread(filenames[i])
       dt1 = datetime.datetime.now()
       outputs = tracker.inference(template_image, input_image)
@@ -291,6 +359,7 @@ if __name__ == "__main__":
 
       # visualize
       search_image = outputs['search_image'].astype(np.uint8)
+
       bbox_search = convert_bbox_format(outputs['current_target_state'].bbox, 'top-left-based')
       input_image = cv2.rectangle(input_image,(int(bbox_search.x), int(bbox_search.y)),(int(bbox_search.x+bbox_search.width), int(bbox_search.y+bbox_search.height)),(0,255,0),2)
 
