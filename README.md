@@ -223,6 +223,10 @@ SiamFC-TensorFlow is released under the MIT License (refer to the LICENSE file f
 2. edgetpu compiler is only compatible with tensorflow 1.15.0, the .tflite model converted by tensorflow 2.x can not compiler to edgetpu model: https://github.com/tensorflow/tensorflow/issues/31368. Thus, the alexnet can not run in edgetpu (TODO, try mobilenet for siamese network).
 
 
-3. install tensorflow/models/resaerch/slim with `pip install -e .` (setup.py)
+3. install [tensorflow/models/resaerch/slim](https://github.com/google-research/tf-slim) with `pip install -e .` (setup.py), and install [tf-slim](https://github.com/google-research/tf-slim) with `pip install -e .` (setup.py)
 
-4. for mobilnet, please use tf 1.x (e.g. 1.5.0) also the frozen graph export, but for tflite conversion, please use tf 2.x (2.1.0)
+4. install [tflite_runtime](https://www.tensorflow.org/lite/guide/python)(python3.5 + tf2.1.0 is compatible for ubuntu16.04) instead of `tensorflow.lite`
+
+5. for mobilnet, please use tf 1.x (e.g. 1.5.0) also the frozen graph export, but for tflite conversion, please use tf 2.x (2.1.0)
+
+6. training: batch size 8-> 64, learning rate 0.01 -> 0.05, context size: 0.5 -> 0.25 ?
