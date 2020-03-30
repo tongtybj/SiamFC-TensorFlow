@@ -102,7 +102,8 @@ def main(model_config, train_config, track_config):
     print("=================== load cfg ")
   else:
     save_cfgs(train_dir, model_config, train_config, track_config)
-    print("=================== save cfg ")
+    print("=================== save default cfg, please modify files in {}".format(train_dir))
+    return
 
   g = tf.Graph()
   with g.as_default():
