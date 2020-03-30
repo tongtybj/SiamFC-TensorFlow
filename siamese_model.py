@@ -16,6 +16,7 @@ import functools
 import tensorflow.compat.v1 as tf
 
 from embeddings.convolutional_alexnet import convolutional_alexnet_arg_scope, convolutional_alexnet
+import embeddings.mobilenet as mobilenet
 from metrics.track_metrics import center_dist_error, center_score_error
 from utils.train_utils import construct_gt_score_maps, load_mat_model
 from siamese_datasets.dataloader import DataLoader
@@ -27,7 +28,6 @@ if TF_MAJOR_VERSION == 1:
     from nets import mobilenet_v1
 else:
     import tf_slim as slim
-
 
 class SiameseModel:
   def __init__(self, model_config, train_config, track_config, mode='train'):
@@ -140,6 +140,7 @@ class SiameseModel:
             with slim.arg_scope(mobilenet_v1.mobilenet_v1_arg_scope(is_training=True)):
                 return mobilenet_v1.mobilenet_v1_base(images,
                                                       final_endpoint = mobilenent_config['final_endpoint'],
+                                                      conv_defs=mobilenet.CONV_DEFS,
                                                       depth_multiplier = mobilenent_config['depth_multiplier'], scope=scope)
 
     self.exemplar_embeds, _ = embedding_fn(self.exemplars, reuse=reuse)
