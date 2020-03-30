@@ -124,7 +124,7 @@ class SiameseModel:
     def embedding_fn(images, reuse=False):
 
         with slim.arg_scope(arg_scope):
-            return convolutional_alexnet(images, reuse=reuse, split=alexnet_config['split'])
+            return convolutional_alexnet(images, reuse=reuse, split=alexnet_config['split'], depthwise_list=alexnet_config['depthwise_list'])
 
     self.exemplar_embeds, _ = embedding_fn(self.exemplars, reuse=reuse)
     self.instance_embeds, _ = embedding_fn(self.instances, reuse=True)

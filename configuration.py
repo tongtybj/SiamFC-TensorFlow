@@ -40,7 +40,8 @@ MODEL_CONFIG = {
   'adjust_response_config': {'train_bias': True,
                              'scale': 1e-3, },
 
-  'alexnet': {'split': True,},
+  'alexnet': {'split': True,
+              'depthwise_list': [], },
   'mobilenet_v1': {'final_endpoint': 'Conv2d_5_pointwise',
                    'depth_multiplier': 1.0, },
 }
