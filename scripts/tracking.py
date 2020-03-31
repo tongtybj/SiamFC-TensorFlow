@@ -151,6 +151,9 @@ class SiameseTracking():
 
       self.num_scales = self.cross_input_details[1]['shape'][0]
 
+      self.embed_z = None
+      self.update_template = False
+
     with open(osp.join(config_filepath, 'model_config.json'), 'r') as f:
       self.model_config = json.load(f)
     with open(osp.join(config_filepath, 'track_config.json'), 'r') as f:
@@ -179,7 +182,7 @@ class SiameseTracking():
     self.original_target_width = bbox.width
 
     search_images, _ = self.crop_search_image(input_image, bbox)
-    print(len(search_images))
+
     # Given the fix ratio btween template image (127) and input image (255) => 1:2
     top = int(round(self.search_center[1] - get_center(self.template_image_size)))
     bottom = int(top + self.template_image_size)
@@ -187,12 +190,13 @@ class SiameseTracking():
     right = int(left + self.template_image_size)
 
     template_image = search_images[int(get_center(self.num_scales))][top:bottom, left:right]
-    print("template_image: {}".format(template_image.shape))
 
     # Update the current_target_state
     self.current_target_state = TargetState(bbox=bbox,
                                             search_pos=self.search_center,
                                             scale_idx=int(get_center(self.num_scales)))
+
+    self.update_template = False
 
     if self.template_image_quant:
       return template_image.astype(np.uint8)
@@ -268,13 +272,14 @@ class SiameseTracking():
     best_scale_index = 0
 
     if self.separate_mode: # separate
-      dt1 = datetime.datetime.now()
-      self.interpreter_template.set_tensor(self.template_input_details[0]['index'], template_image)
-      self.interpreter_template.invoke()
-      dt2 = datetime.datetime.now()
-      print("template inference du: {}".format(dt2.timestamp() - dt1.timestamp()))
-      embed_z = self.embed_z_scale * (self.interpreter_template.get_tensor(self.template_output_details[0]['index']).astype(np.float32)  - self.embed_z_offset)
-      #print("embed z : {}".format(embed_z))
+      if not self.update_template:
+        dt1 = datetime.datetime.now()
+        self.interpreter_template.set_tensor(self.template_input_details[0]['index'], template_image)
+        self.interpreter_template.invoke()
+        dt2 = datetime.datetime.now()
+        print("template inference du: {}".format(dt2.timestamp() - dt1.timestamp()))
+        self.embed_z = self.embed_z_scale * (self.interpreter_template.get_tensor(self.template_output_details[0]['index']).astype(np.float32)  - self.embed_z_offset)
+        self.update_template = True
 
       embed_x_list = []
       for i in range(self.num_scales):
@@ -290,19 +295,17 @@ class SiameseTracking():
       print("embed x : {}".format(embed_x.shape))
 
       if self.cross_input_template_scale != 1 and self.cross_input_search_scale != 1:
-        embed_z = (embed_z / self.cross_input_template_scale + self.cross_input_template_offset).astype(np.uint8)
+        self.embed_z = (self.embed_z / self.cross_input_template_scale + self.cross_input_template_offset).astype(np.uint8)
         embed_x = (embed_x / self.cross_input_search_scale + self.cross_input_search_offset).astype(np.uint8)
 
       dt1 = datetime.datetime.now()
-      self.interpreter_cross.set_tensor(self.cross_input_details[0]['index'], embed_z)
+      self.interpreter_cross.set_tensor(self.cross_input_details[0]['index'], self.embed_z)
       self.interpreter_cross.set_tensor(self.cross_input_details[1]['index'], embed_x)
       self.interpreter_cross.invoke()
       dt2 = datetime.datetime.now()
       print("cross inference du: {}".format(dt2.timestamp() - dt1.timestamp()))
       raw_output_data = self.cross_output_scale * (self.interpreter_cross.get_tensor(self.cross_output_details[0]['index']) - self.cross_output_offset)
       # print("cross correlation : {}".format(np.squeeze(raw_output_data[int(get_center(self.num_scales))])))
-
-      #raise ValueError("test")
 
       # post-processing for upsampling the result
       response = np.empty((self.num_scales, self.track_config['upsample_factor'] * raw_output_data.shape[1], self.track_config['upsample_factor'] * raw_output_data.shape[1]))
