@@ -1,0 +1,29 @@
+{
+  "z_image_size": 127,
+  "embed_config": {
+    "embedding_name": "feature_extractor",
+    "embedding_checkpoint_file": "assets/2016-08-17.net.mat",
+    "train_embedding": false,
+    "init_method": "kaiming_normal",
+    "use_bn": true,
+    "bn_scale": true,
+    "bn_momentum": 0.05,
+    "bn_epsilon": 1e-06,
+    "embedding_feature_num": 256,
+    "weight_decay": 0.0005,
+    "stride": 8,
+    "feature_extractor": "alexnet",
+    "quantization": false
+  },
+  "adjust_response_config": {
+    "train_bias": true,
+    "scale": 0.001
+  },
+  "alexnet": {
+    "split": true
+  },
+  "mobilenet_v1": {
+    "final_endpoint": "Conv2d_5_pointwise",
+    "depth_multiplier": 1.0
+  }
+}
