@@ -4,6 +4,6 @@ Output: search_image_feature_extractor_full_quant_scale1_edgetpu.tflite
 
 Operator                       Count      Status
 
-CONV_2D                        6          Mapped to Edge TPU
 DEPTHWISE_CONV_2D              5          Mapped to Edge TPU
 QUANTIZE                       2          Mapped to Edge TPU
+CONV_2D                        6          Mapped to Edge TPU
