@@ -1,43 +1,43 @@
 {
-  "log_every_n_steps": 10,
-  "seed": 123,
-  "max_checkpoints_to_keep": null,
-  "validation_data_config": {
-    "input_imdb": "data/validation_imdb.pickle",
-    "prefetch_threads": 1,
-    "prefetch_capacity": 120,
-    "preprocessing_name": "None",
-    "batch_size": 16,
-    "max_frame_dist": 100
-  },
-  "clip_gradients": null,
   "gt_config": {
-    "rPos": 16,
-    "rNeg": 0
-  },
-  "save_model_every_n_step": 6650,
-  "optimizer_config": {
-    "optimizer": "MOMENTUM",
-    "use_nesterov": false,
-    "momentum": 0.9
+    "rNeg": 0,
+    "rPos": 16
   },
   "export": false,
   "train_data_config": {
     "input_imdb": "data/train_imdb.pickle",
-    "preprocessing_name": "siamese_fc_color",
-    "num_examples_per_epoch": 53200.0,
+    "prefetch_threads": 4,
     "prefetch_capacity": 120,
-    "batch_size": 64,
-    "epoch": 50,
+    "batch_size": 32,
     "max_frame_dist": 100,
-    "prefetch_threads": 4
+    "num_examples_per_epoch": 53200.0,
+    "epoch": 50,
+    "preprocessing_name": "siamese_fc_color"
+  },
+  "clip_gradients": null,
+  "log_every_n_steps": 10,
+  "optimizer_config": {
+    "optimizer": "MOMENTUM",
+    "momentum": 0.9,
+    "use_nesterov": false
   },
   "lr_config": {
-    "staircase": true,
-    "policy": "exponential",
-    "initial_lr": 0.06,
+    "num_epochs_per_decay": 1,
     "lr_decay_factor": 0.8685113737513527,
-    "num_epochs_per_decay": 1
+    "initial_lr": 0.04,
+    "policy": "exponential",
+    "staircase": true
   },
-  "train_dir": "Logs/SiamFC/track_model_checkpoints/train"
+  "seed": 123,
+  "max_checkpoints_to_keep": null,
+  "save_model_every_n_step": 6650,
+  "train_dir": "Logs/SiamFC/track_model_checkpoints/train",
+  "validation_data_config": {
+    "max_frame_dist": 100,
+    "input_imdb": "data/validation_imdb.pickle",
+    "preprocessing_name": "None",
+    "prefetch_capacity": 120,
+    "batch_size": 8,
+    "prefetch_threads": 1
+  }
 }

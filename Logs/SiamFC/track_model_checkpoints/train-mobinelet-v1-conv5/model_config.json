@@ -1,29 +1,30 @@
 {
-  "adjust_response_config": {
-    "train_bias": true,
-    "scale": 0.001
+  "alexnet": {
+    "depthwise_list": [],
+    "split": true
   },
   "mobilenet_v1": {
     "depth_multiplier": 1.0,
     "final_endpoint": "Conv2d_5_pointwise"
   },
-  "z_image_size": 127,
-  "alexnet": {
-    "split": true
+  "adjust_response_config": {
+    "train_bias": true,
+    "scale": 0.001
   },
+  "z_image_size": 127,
   "embed_config": {
-    "init_method": "kaiming_normal",
-    "embedding_feature_num": 256,
-    "feature_extractor": "mobilenet_v1",
-    "train_embedding": true,
-    "bn_scale": true,
-    "use_bn": true,
-    "embedding_name": "feature_extractor",
-    "quantization": false,
-    "bn_epsilon": 1e-06,
+    "embedding_checkpoint_file": null,
     "weight_decay": 0.0005,
-    "bn_momentum": 0.05,
+    "bn_scale": true,
+    "bn_epsilon": 1e-06,
     "stride": 8,
-    "embedding_checkpoint_file": null
+    "train_embedding": true,
+    "feature_extractor": "mobilenet_v1",
+    "use_bn": true,
+    "quantization": false,
+    "bn_momentum": 0.05,
+    "embedding_name": "feature_extractor",
+    "init_method": "kaiming_normal",
+    "embedding_feature_num": 256
   }
 }
