@@ -1,0 +1,10 @@
+Edge TPU Compiler version 2.0.291256449
+Input: search_image_feature_extractor_full_quant_scale3.tflite
+Output: search_image_feature_extractor_full_quant_scale3_edgetpu.tflite
+
+Operator                       Count      Status
+
+DEPTHWISE_CONV_2D              5          Tensor has unsupported rank (up to 3 innermost dimensions mapped)
+QUANTIZE                       1          Operation is otherwise supported, but not mapped due to some unspecified limitation
+QUANTIZE                       1          Mapped to Edge TPU
+CONV_2D                        6          Tensor has unsupported rank (up to 3 innermost dimensions mapped)
