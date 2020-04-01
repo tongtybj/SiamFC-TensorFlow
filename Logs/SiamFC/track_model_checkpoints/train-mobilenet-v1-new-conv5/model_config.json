@@ -1,0 +1,30 @@
+{
+  "z_image_size": 127,
+  "adjust_response_config": {
+    "train_bias": true,
+    "scale": 0.001
+  },
+  "alexnet": {
+    "split": true,
+    "depthwise_list": []
+  },
+  "mobilenet_v1": {
+    "depth_multiplier": 1.0,
+    "final_endpoint": "Conv2d_5_pointwise"
+  },
+  "embed_config": {
+    "embedding_checkpoint_file": null,
+    "embedding_name": "feature_extractor",
+    "use_bn": true,
+    "stride": 8,
+    "feature_extractor": "mobilenet_v1",
+    "embedding_feature_num": 256,
+    "bn_momentum": 0.05,
+    "bn_epsilon": 1e-06,
+    "bn_scale": true,
+    "weight_decay": 0.0005,
+    "train_embedding": true,
+    "quantization": false,
+    "init_method": "kaiming_normal"
+  }
+}

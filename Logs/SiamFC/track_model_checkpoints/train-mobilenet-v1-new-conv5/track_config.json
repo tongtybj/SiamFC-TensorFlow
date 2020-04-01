@@ -1,0 +1,13 @@
+{
+  "num_scales": 3,
+  "log_level": 0,
+  "x_image_size": 255,
+  "scale_penalty": 0.9745,
+  "upsample_method": "bicubic",
+  "scale_damp": 0.59,
+  "log_dir": "Logs/SiamFC/track_model_inference/train",
+  "window_influence": 0.176,
+  "upsample_factor": 16,
+  "include_first": false,
+  "scale_step": 1.0375
+}
