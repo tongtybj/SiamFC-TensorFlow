@@ -1,0 +1,43 @@
+{
+  "gt_config": {
+    "rPos": 16,
+    "rNeg": 0
+  },
+  "clip_gradients": null,
+  "validation_data_config": {
+    "input_imdb": "data/validation_imdb.pickle",
+    "max_frame_dist": 100,
+    "preprocessing_name": "None",
+    "prefetch_capacity": 120,
+    "prefetch_threads": 1,
+    "batch_size": 8
+  },
+  "export": false,
+  "train_data_config": {
+    "input_imdb": "data/train_imdb.pickle",
+    "max_frame_dist": 100,
+    "prefetch_threads": 4,
+    "epoch": 50,
+    "preprocessing_name": "siamese_fc_color",
+    "prefetch_capacity": 120,
+    "batch_size": 8,
+    "num_examples_per_epoch": 53200.0
+  },
+  "lr_config": {
+    "policy": "exponential",
+    "initial_lr": 0.01,
+    "lr_decay_factor": 0.8685113737513527,
+    "num_epochs_per_decay": 1,
+    "staircase": true
+  },
+  "optimizer_config": {
+    "optimizer": "MOMENTUM",
+    "use_nesterov": false,
+    "momentum": 0.9
+  },
+  "log_every_n_steps": 10,
+  "save_model_every_n_step": 6650,
+  "seed": 123,
+  "max_checkpoints_to_keep": null,
+  "train_dir": "Logs/SiamFC/track_model_checkpoints/train"
+}
