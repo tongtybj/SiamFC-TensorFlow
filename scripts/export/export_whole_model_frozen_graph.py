@@ -22,6 +22,7 @@ CURRENT_DIR = osp.dirname(__file__)
 sys.path.append(osp.join(CURRENT_DIR, '../..'))
 
 from embeddings.convolutional_alexnet import convolutional_alexnet_arg_scope, convolutional_alexnet
+import embeddings.mobilenet as mobilenet
 from utils.misc_utils import load_cfgs
 from siamese_datasets.dataloader import DataLoader
 
@@ -77,9 +78,9 @@ if __name__ == '__main__':
         mobilenent_config = model_config['mobilenet_v1']
         with slim.arg_scope(mobilenet_v1.mobilenet_v1_arg_scope(is_training=False)):
           with tf.variable_scope('MobilenetV1', reuse=False) as scope:
-            embed_x, end_points = mobilenet_v1.mobilenet_v1_base(input_image, final_endpoint = mobilenent_config['final_endpoint'], depth_multiplier = mobilenent_config['depth_multiplier'], scope=scope)
+            embed_x, end_points = mobilenet_v1.mobilenet_v1_base(input_image, final_endpoint = mobilenent_config['final_endpoint'], conv_defs=mobilenet.CONV_DEFS, depth_multiplier = mobilenent_config['depth_multiplier'], scope=scope)
           with tf.variable_scope('MobilenetV1', reuse=True) as scope:
-            embed_z, end_points_z = mobilenet_v1.mobilenet_v1_base(template_image, final_endpoint = mobilenent_config['final_endpoint'], depth_multiplier = mobilenent_config['depth_multiplier'], scope=scope)
+            embed_z, end_points_z = mobilenet_v1.mobilenet_v1_base(template_image, final_endpoint = mobilenent_config['final_endpoint'], conv_defs=mobilenet.CONV_DEFS, depth_multiplier = mobilenent_config['depth_multiplier'], scope=scope)
       else:
         raise ValueError("Invalid feature extractor: {}".format(feature_extactor))
 

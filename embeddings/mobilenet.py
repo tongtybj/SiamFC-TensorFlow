@@ -14,6 +14,7 @@ if TF_MAJOR_VERSION == 1:
 else:
     import tf_slim as slim
 
+'''
 CONV_DEFS = [
   mobilenet_v1.Conv(kernel=[3, 3], stride=2, depth=32),
   mobilenet_v1.DepthSepConv(kernel=[3, 3], stride=1, depth=64),
@@ -28,4 +29,18 @@ CONV_DEFS = [
   mobilenet_v1.DepthSepConv(kernel=[3, 3], stride=1, depth=256),
   mobilenet_v1.DepthSepConv(kernel=[3, 3], stride=1, depth=256)
 ]
-
+'''
+CONV_DEFS = [
+  mobilenet_v1.Conv(kernel=[3, 3], stride=2, depth=96),
+  mobilenet_v1.DepthSepConv(kernel=[3, 3], stride=1, depth=256),
+  mobilenet_v1.DepthSepConv(kernel=[3, 3], stride=2, depth=384),
+  mobilenet_v1.DepthSepConv(kernel=[3, 3], stride=1, depth=512),
+  mobilenet_v1.DepthSepConv(kernel=[3, 3], stride=2, depth=256),
+  mobilenet_v1.DepthSepConv(kernel=[3, 3], stride=1, depth=256),
+  mobilenet_v1.DepthSepConv(kernel=[3, 3], stride=1, depth=256),
+  mobilenet_v1.DepthSepConv(kernel=[3, 3], stride=1, depth=256),
+  mobilenet_v1.DepthSepConv(kernel=[3, 3], stride=1, depth=256),
+  mobilenet_v1.DepthSepConv(kernel=[3, 3], stride=1, depth=256),
+  mobilenet_v1.DepthSepConv(kernel=[3, 3], stride=1, depth=256),
+  mobilenet_v1.DepthSepConv(kernel=[3, 3], stride=1, depth=256)
+]
