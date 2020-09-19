@@ -204,6 +204,7 @@ class SiameseTracking():
       if self.embed_x_scale == 1:
         search_image = search_image.astype(np.float32)
       dt1 = datetime.datetime.now()
+      print(search_image.shape)
       self.interpreter_search.set_tensor(self.search_input_details[0]['index'], search_image)
       self.interpreter_search.invoke()
       dt2 = datetime.datetime.now()

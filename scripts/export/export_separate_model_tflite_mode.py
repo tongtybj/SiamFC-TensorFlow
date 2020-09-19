@@ -66,8 +66,13 @@ if __name__ == '__main__':
             scale = n.attr['shape'].shape.dim[0].size
 
     # search image feature extractor
-    #converter = tf.lite.TFLiteConverter.from_frozen_graph(args.frozen_graph_model, ['input_image'], ['convolutional_alexnet/conv5/concat'])
-    converter = tf.lite.TFLiteConverter.from_frozen_graph(args.frozen_graph_model, ['input_image'], ['MobilenetV1/MobilenetV1/Conv2d_5_pointwise/Relu6'])
+    converter = None
+    if model_config['embed_config']['feature_extractor'] == 'alexnet':
+        converter = tf.lite.TFLiteConverter.from_frozen_graph(args.frozen_graph_model, ['input_image'], ['convolutional_alexnet/conv5/concat'])
+    elif model_config['embed_config']['feature_extractor'] == 'mobilenet_v1':
+        converter = tf.lite.TFLiteConverter.from_frozen_graph(args.frozen_graph_model, ['input_image'], ['MobilenetV1/MobilenetV1/Conv2d_5_pointwise/Relu6'])
+    else:
+        raise ValueError("incorrecot feature extrator: {}".format(model_config['embed_config']['feature_extractor']))
 
     tflite_model = converter.convert()
     filename = 'search_image_feature_extractor'
@@ -95,8 +100,10 @@ if __name__ == '__main__':
     print("finish tflite conversion for {}".format(filename))
 
     # template image feature extractor
-    #converter = tf.lite.TFLiteConverter.from_frozen_graph(args.frozen_graph_model, ['template_image'], ['convolutional_alexnet_1/conv5/concat'])
-    converter = tf.lite.TFLiteConverter.from_frozen_graph(args.frozen_graph_model, ['template_image'], ['MobilenetV1_1/MobilenetV1/Conv2d_5_pointwise/Relu6'])
+    if model_config['embed_config']['feature_extractor'] == 'alexnet':
+      converter = tf.lite.TFLiteConverter.from_frozen_graph(args.frozen_graph_model, ['template_image'], ['convolutional_alexnet_1/conv5/concat'])
+    elif model_config['embed_config']['feature_extractor'] == 'mobilenet_v1':
+      converter = tf.lite.TFLiteConverter.from_frozen_graph(args.frozen_graph_model, ['template_image'], ['MobilenetV1_1/MobilenetV1/Conv2d_5_pointwise/Relu6'])
 
     tflite_model = converter.convert()
     filename = 'template_image_feature_extractor'
@@ -122,8 +129,10 @@ if __name__ == '__main__':
     print("finish tflite conversion for {}".format(filename))
 
     # corss correlation
-    #converter = tf.lite.TFLiteConverter.from_frozen_graph(args.frozen_graph_model, ['convolutional_alexnet_1/conv5/concat', 'convolutional_alexnet/conv5/concat'], ['detection/add'])
-    converter = tf.lite.TFLiteConverter.from_frozen_graph(args.frozen_graph_model, ['MobilenetV1_1/MobilenetV1/Conv2d_5_pointwise/Relu6', 'MobilenetV1/MobilenetV1/Conv2d_5_pointwise/Relu6'], ['detection/add'])
+    if model_config['embed_config']['feature_extractor'] == 'alexnet':
+      converter = tf.lite.TFLiteConverter.from_frozen_graph(args.frozen_graph_model, ['convolutional_alexnet_1/conv5/concat', 'convolutional_alexnet/conv5/concat'], ['detection/add'])
+    elif model_config['embed_config']['feature_extractor'] == 'mobilenet_v1':
+      converter = tf.lite.TFLiteConverter.from_frozen_graph(args.frozen_graph_model, ['MobilenetV1_1/MobilenetV1/Conv2d_5_pointwise/Relu6', 'MobilenetV1/MobilenetV1/Conv2d_5_pointwise/Relu6'], ['detection/add'])
 
     tflite_model = converter.convert()
     filename = 'cross_correlation'

@@ -1,0 +1,43 @@
+{
+    "validation_data_config": {
+        "max_frame_dist": 100,
+        "preprocessing_name": "None",
+        "input_imdb": "data/validation_imdb.pickle",
+        "prefetch_capacity": 120,
+        "prefetch_threads": 1,
+        "batch_size": 8
+    },
+    "gt_config": {
+        "rPos": 16,
+        "rNeg": 0
+    },
+    "train_dir": "Logs/SiamFC/track_model_checkpoints/train",
+    "save_model_every_n_step": 6650,
+    "clip_gradients": null,
+    "train_data_config": {
+        "preprocessing_name": "siamese_fc_color",
+        "epoch": 50,
+        "max_frame_dist": 100,
+        "input_imdb": "data/train_imdb.pickle",
+        "prefetch_capacity": 120,
+        "prefetch_threads": 4,
+        "batch_size": 8,
+        "num_examples_per_epoch": 53200.0
+    },
+    "max_checkpoints_to_keep": null,
+    "log_every_n_steps": 10,
+    "export": false,
+    "seed": 123,
+    "lr_config": {
+        "num_epochs_per_decay": 1,
+        "lr_decay_factor": 0.8685113737513527,
+        "initial_lr": 0.01,
+        "policy": "exponential",
+        "staircase": true
+    },
+    "optimizer_config": {
+        "optimizer": "MOMENTUM",
+        "use_nesterov": false,
+        "momentum": 0.9
+    }
+}

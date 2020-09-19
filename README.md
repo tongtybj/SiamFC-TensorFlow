@@ -1,232 +1,125 @@
 # SiamFC-TensorFlow
 A TensorFlow implementation of the SiamFC tracker
 
-## Introduction
+## Installation
+-  [tensorflow/models/resaerch/slim](https://github.com/google-research/tf-slim) with `pip install -e .` (setup.py), and install [tf-slim](https://github.com/google-research/tf-slim) with `pip install -e .` (setup.py)
 
-This is a TensorFlow implementation of [Fully-Convolutional Siamese Networks for Object Tracking](https://arxiv.org/abs/1606.09549). You can find the original MatConvNet version [here](https://github.com/bertinetto/siamese-fc). The SiamFC authors have also  released a TensorFlow port of the tracking part (using pretrained model only) in [here](https://github.com/torrvision/siamfc-tf). 
+- [tflite_runtime](https://www.tensorflow.org/lite/guide/python)(tflite_runtime-2.1.0: compatible for ubuntu16.04, python3.5 + tf2.1.0) instead of `tensorflow.lite`, this is also necessary for delagatation of `libedgetpu.so.1` (tflite-2.1.0 is OK for edgeput)
 
-This TensorFlow implementation is designed with these goals:
-- [x] **Self-contained**. Data preparation, model training, tracking, visualization and logging all in one.
-- [x] **Correctness**. The tracking performance should be similar to the MatConvNet version.
-- [x] **Efficiency**. The training and inference procedures should be as efficient as possible.
-- [x] **Modularization**. The whole system should be modularized and easy to expand with new ideas.
-- [x] **Readability**. The code should be clear and consistent.
+- [edgetpu library](https://coral.ai/docs/accelerator/get-started/#1b-on-mac)
 
-## Main Results
-In a computer with a `GeForce GTX 1080` GPU, the main results on OTB-100 are in the table below. Note that the performance of SiamFC-3s-color trained from scratch using our implementation is consistently better than SiamFC-3s-gray-scratch. Moreover, We observe that the tracking performance of saved models in different epochs varies considerably, therefore, you may want to evaluate a few more models instead of just picking the model in the last epoch.  
-
-|                   | Reported (AUC)     | Pretrained (AUC)       | Train from scratch (AUC)  | Training time | Tracking time|
-|-------------------|:-------------------:|:---------------------:|:-----:|:--------------:|:------------------:|
-|SiamFC-3s-color  | --                      | 0.578        | 0.584            | ~5h        | ~120fps            |
-|SiamFC-3s-gray   | 0.582                   | 0.587        | 0.573            | ~5h        | ~120fps            |
-
-Qualitative results:
-
-![Qualitative_results](./assets/results.png)
-
-## Prerequisite
-The main requirements can be installed by:
-```bash
-# (OPTIONAL) 0. It is highly recommended to create a virtualenv or conda environment
-# For example, 
-#       conda create -n tensorflow1.4 python=2.7
-#       source activate tensorflow1.4
-
-# 1. Install TensorFlow 1.4.0 
-# Version 1.4.0 is required for training since we use tf.data API
-# You can use TensorFlow > 1.0 for tracking though.
-# Note the tracking performance slightly varies in different versions.
-# pip install tensorflow    # For CPU
-pip install tensorflow-gpu  # For GPU
-
-# 2. Install scipy for loading mat files
-pip install scipy
-
-# 3. Install sacred for experiments logging
-pip install sacred==0.7.5
-
-# 4. Install matplotlib for visualizing tracking results
-pip install matplotlib
-
-# 5. Install opencv for preprocessing training examples
-pip install opencv-python
-
-# 6. Install pillow for some image-related operations
-pip install pillow
-
-# (OPTIONAL) 7. Install nvidia-ml-py for automatically selecting GPU
-pip install nvidia-ml-py
-```
-
-## Tracking
-```bash
-# 1. Clone this repository to your disk
-git clone https://github.com/bilylee/SiamFC-TensorFlow.git
-
-# 2. Change working directory
-cd SiamFC-TensorFlow
-
-# 3. Download pretrained models and one test sequence 
-python scripts/download_assets.py
-
-# 4. Convert pretrained MatConvNet model into TensorFlow format.
-# Note we use SiamFC-3s-color-pretrained as one example. You
-# Can also use SiamFC-3s-gray-pretrained. 
-python experiments/SiamFC-3s-color-pretrained.py
-
-# 5. Run tracking on the test sequence with the converted model
-python scripts/run_tracking.py
-
-# 6. Show tracking results
-# You can press Enter to toggle between play and pause, and drag the 
-# scrolling bar in the figure. For more details, see utils/videofig.py
-python scripts/show_tracking.py
-```
 
 ## Training
 ```bash
 # 1. Download and unzip the ImageNet VID 2015 dataset (~86GB)
 # Now, we assume it is unzipped in /path/to/ILSVRC2015
+
 DATASET=/path/to/ILSVRC2015
-
-# 2. Clone this repository to your disk 
-# (Skip this step if you have already done it in the Tracking section)
-git clone https://github.com/bilylee/SiamFC-TensorFlow.git
-
-# 3. Change working directory
 cd SiamFC-TensorFlow
-
-# 4. Create a soft link pointing to the ImageNet VID dataset
-mkdir -p data
 ln -s $DATASET data/ILSVRC2015
 
-# 5. Prepare training data
+# 2. Prepare training data
 # If you have followed the data preparation procedures in 
 # the MatConvNet implementation, simply create a soft link 
 # pointing to the curated dataset:
 #       ln -s $CURATED_DATASET data/ILSVRC2015-VID-Curation
 # Otherwise, create it from scratch by
+
 python scripts/preprocess_VID_data.py
 
-# 6. Split train/val dataset and store corresponding image paths
+# 3. Split train/val dataset and store corresponding image paths
+
 python scripts/build_VID2015_imdb.py
 
-# 7. Start training
+# 3. Start training
+# please add options in train.py based on sacred rules
 # You can get quite good results after ~70k iterations.
-python experiments/SiamFC-3s-color-scratch.py
+python experiments/train.py
 
-# 8. (OPTIONAL) View the training progress in TensorBoard
+# 4. View the training progress in TensorBoard
 # Open a new terminal session and cd to SiamFC-TensorFlow, then
-tensorboard --logdir=Logs/SiamFC/track_model_checkpoints/SiamFC-3s-color-scratch
+tensorboard --logdir=Logs/SiamFC/track_model_checkpoints/train/
 ```
 
-Example TensorBoard outputs are like:
+## Export Inference  Model
 
-![TensorBoard](./assets/TensorBoard.png)
-
-## Benchmark
-You can use the `run_SiamFC.py` in `benchmarks` directory to integrate with the OTB evaluation toolkit. The OTB toolkit has been ported to python. The original version is [here](https://github.com/jwlim/tracker_benchmark). However, you may want to use my [custom version](https://github.com/bilylee/tracker_benchmark) where several bugs are fixed. 
-
-Assume that you have followed the steps in `Tracking` or `Training` section and now have a pretrained/trained-from-scratch model to evaluate. To integrate with the evaluation toolkit, 
-```bash
-# Let's follow this directory structure
-# Your-Workspace-Directory
-#         |- SiamFC-TensorFlow
-#         |- tracker_benchmark
-#         |- ...
-# 0. Go to your workspace directory
-cd /path/to/your/workspace
-
-# 1. Download the OTB toolkit
-git clone https://github.com/bilylee/tracker_benchmark.git
-
-# 2. Modify line 22 and 25 in SiamFC-TensorFlow/benchmarks/run_SiamFC.py accordingly. 
-# In Linux, you can simply run
-sed -i "s+/path/to/SiamFC-TensorFlow+`realpath SiamFC-TensorFlow`+g" SiamFC-TensorFlow/benchmarks/run_SiamFC.py
-
-# 3. Copy run_SiamFC.py to the evaluation toolkit
-cp SiamFC-TensorFlow/benchmarks/run_SiamFC.py tracker_benchmark/scripts/bscripts
-
-# 4. Add the tracker to the evaluation toolkit list
-echo "\nfrom run_SiamFC import *" >> tracker_benchmark/scripts/bscripts/__init__.py
-
-# 5. Create tracker directory in the evaluation toolkit
-mkdir tracker_benchmark/trackers/SiamFC
-
-# 6. Start evaluation (it will take some time to download test sequences).
-echo "tb100" | python tracker_benchmark/run_trackers.py -t SiamFC -s tb100 -e OPE
-
-# 7. Get the AUC score
-sed -i "s+tb50+tb100+g" tracker_benchmark/draw_graph.py
-python tracker_benchmark/draw_graph.py
+### Export whole model frozen graph
 ```
+$ python scripts/export/export_whole_model_frozen_graph.py
+```
+**note**: `--checkpoint_dir=Logs/SiamFC/track_model_checkpoints/train` for designating the training directory.
 
-## License
-SiamFC-TensorFlow is released under the MIT License (refer to the LICENSE file for details).
-
-## Usage
-- export frozen graph (no scale tracking)
-  ```
-  $ python scripts/export_siamese_fc_model.py
-  ```
-- export from scratch training model :
-  ```
-  $ python scripts/export_siamese_fc_model.py --checkpoint_dir=Logs/SiamFC/track_model_checkpoints/SiamFC-3s-color-scratch
-  ```
-
-- export fully quantized tflite model, need tf-2.1.0 (version < 2.1.0 does no support the quantization of SPLIT)
-  ```
+### Export common tflite model and a fully quantized tflite model
+```
+$ python scripts/export/export_whole_model_tflite_model.py
+```
+**note1**: please use `--frozen_graph_model` to designate a proper *.pb file.
+**note2**: need tf-2.1.0, since version < 2.1.0 does no support the quantization of SPLIT
+```
   $ pip install pip install tensorflow-gpu==2.1.0
   $ python scripts/export_siamese_fc_model.py
-  ```
-  **note**: you have to install [tf-slim](converted_model_full_quant.tflite)
+```
 
-- export seperate model
-  1. tempalte feature extractor: TODO (use `scripts/export_siamese_fc_model.py`)
-  2. search feature extractor: TODO (use `scripts/export_siamese_fc_model.py`)
-  3. cross-correlation: `$ python scripts/export_siamese_fc_model_cross_correlation.py --checkpoint_dir=Logs/SiamFC/track_model_checkpoints/SiamFC-3s-color-pretrained`
+**depreacated**: you have to also install [tf-slim](converted_model_full_quant.tflite)
 
-- tracking from frozen graph
-  ```
-  $ python scripts/tracking_from_frozen_graph.py (~0.02s in GTX1080Ti)
-  ```
-  or
-  ```
-  $ python scripts/tracking_from_frozen_graph.py --model=Logs/SiamFC/track_model_checkpoints/SiamFC-3s-color-scratch/models/frozen_graph.pb --config=Logs/SiamFC/track_model_checkpoints/SiamFC-3s-color-scratch
-  ```
+### Export seperate model
+```
+$ python scripts/export/export_separate_model_tflite_mode.py
+```
+**note1**: this is based on a frozen graph, option for alexnet: `--frozen_graph_model=/home/chou/SiamFC-TensorFlow/Logs/SiamFC/track_model_checkpoints/train-alexnet-split/models/whole_model_scale1.pb --config_filepath=/home/chou/SiamFC-TensorFlow/Logs/SiamFC/track_model_checkpoints/train-alexnet-split/models`.
 
-- tracking using tflite model (~0.09s in desktop CPU)
-  ```
-  $ python scripts/tracking_from_frozen_graph.py --model=inference_model/converted_model.tflite --lite=True
-  ```
+**note2**: compile to edgetpu compatible tflite mode: `edgetpu_compiler search_image_feature_extractor_full_quant_scale1.tflite`
 
-- tracking using weight-only quantization model (~0.5s in desktop CPU)
-  ```
-  $ python scripts/tracking_from_frozen_graph.py --model=inference_model/converted_model_weight_quant.tflite --lite=True
-  ```
 
-- tracking using full quantization model (~8s in desktop CPU)
-  ```
-  $ python scripts/tracking_from_frozen_graph.py --model=inference_model/converted_model_full_quant.tflite --lite=True --full_quant=True
-  ```
+## Tracking
 
-- tracking using seperate model:
-  ```
-  $ python scripts/tracking_separate.py --headless
-  ```
-  **note**: fastest way: `$ python scripts/tracking_separate.py --headless --cross_model=converted_model_cross_correlation.tflite --search_mode=converted_model_full_quant_search_feature_extractor_edgetpu.tflite --template_mode=converted_model_template_feature_extractor.tflite`
+### From frozen graph
+```
+$ python scripts/tracking.py
+```
+**note1**: options: `--models_dir=Logs/SiamFC/track_model_checkpoints/train-alexnet-split/models --whole_mode=whole_model_scale3.pb --config=Logs/SiamFC/track_model_checkpoints/train-alexnet-split`
+**note2**:  ~0.02s in GTX1080Ti with  **scale 1?**, ~0.04 in RTX2060 SUPER with scale 1
+  
+### From tflite model (~0.09s in desktop CPU)
 
-- Note:
+#### tracking using non-quantization model (**~0.?s** in desktop CPU)
+```
+$ python scripts/tracking.py
+```
+**note1**: options: `--models_dir=Logs/SiamFC/track_model_checkpoints/train-alexnet-split/models --whole_mode=whole_model_scale3.tflite --config=Logs/SiamFC/track_model_checkpoints/train-alexnet-split`
+**note2**: ~0.1 in Intel i7-4770 with scale1 ; ~0.3 in Intel i7-4770 with scale3
+
+
+#### tracking using full quantization model (different from weight-only quatization model)
+```
+$ python scripts/tracking.py
+```
+**note1**: options: `--models_dir=Logs/SiamFC/track_model_checkpoints/train-alexnet-split/models --whole_mode=whole_model_full_quant_scale1.tflite --config=Logs/SiamFC/track_model_checkpoints/train-alexnet-split`
+**note2**: ~7.2 in Intel i7-4770 with scale 1
+
+### Using seperate model (non-scale tracking):
+```
+$ python scripts/tracking.py  --config=/home/chou/SiamFC-TensorFlow/Logs/SiamFC/track_model_checkpoints/train-alexnet-split  --models_dir=/home/chou/SiamFC-TensorFlow/Logs/SiamFC/track_model_checkpoints/train-alexnet-split/models --search_model=search_image_feature_extractor_scale1.tflite --template_model=template_image_feature_extractor_scale1.tflite --cross_model=cross_correlation_scale1.tflite --headless --separate_mode
+```
+  ** note1 **: fastest option: `--search_mode=search_image_feature_extractor_full_quant_scale1_edgetpu.tflite`
+  ** note2 for scale **: scale1 => `cross_correlation_scale1.tflite`; scale3 => `cross_correlation_scale3.tflite`; do not change `--search_model` to `scale3`.
+```
+tracking du: 0.0323488712310791
+search_window_size: 124.62415099356501
+search inference du for 0th batch: 0.004250049591064453
+search inference du for 1th batch: 0.004121065139770508
+search inference du for 2th batch: 0.004178047180175781
+embed x : (3, 22, 22, 256)
+cross inference du: 0.002541780471801758
+```
+
+## Tips:
 1. tensorflow lite quantization:
    tensorflow with version < 2.1.0 does no support the quantization of SPLIT, so the split operation of alexnet can not convert withotu 2.1.0
 
-2. edgetpu compiler is only compatible with tensorflow 1.15.0, the .tflite model converted by tensorflow 2.x can not compiler to edgetpu model: https://github.com/tensorflow/tensorflow/issues/31368. Thus, the alexnet can not run in edgetpu (TODO, try mobilenet for siamese network).
+2. edgetpu_compiler: convert to edgeput compatible .tflite model. For download, please check https://coral.ai/docs/edgetpu/compiler/#usage .
+edgetpu compiler is only compatible with tensorflow 1.15.0, the .tflite model converted by tensorflow 2.x can not compiler to edgetpu model: https://github.com/tensorflow/tensorflow/issues/31368.
 
+6. for mobilnet, please use tf 1.x (e.g. 1.5.0) also the frozen graph export, but for tflite conversion, please use tf 2.x (2.1.0)
 
-3. install [tensorflow/models/resaerch/slim](https://github.com/google-research/tf-slim) with `pip install -e .` (setup.py), and install [tf-slim](https://github.com/google-research/tf-slim) with `pip install -e .` (setup.py)
-
-4. install [tflite_runtime](https://www.tensorflow.org/lite/guide/python)(python3.5 + tf2.1.0 is compatible for ubuntu16.04) instead of `tensorflow.lite`
-
-5. for mobilnet, please use tf 1.x (e.g. 1.5.0) also the frozen graph export, but for tflite conversion, please use tf 2.x (2.1.0)
-
-6. training: batch size 8-> 64, learning rate 0.01 -> 0.05, context size: 0.5 -> 0.25 ?
+7. training: batch size 8-> 64, learning rate 0.01 -> 0.05, context size: 0.5 -> 0.25 ?

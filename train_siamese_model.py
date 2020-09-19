@@ -97,13 +97,7 @@ def main(model_config, train_config, track_config):
     logging.info('Creating training directory: %s', train_dir)
     mkdir_p(train_dir)
 
-  if have_cfgs(train_dir):
-    model_config, train_config, track_config = load_cfgs(train_dir)
-    print("=================== load cfg ")
-  else:
-    save_cfgs(train_dir, model_config, train_config, track_config)
-    print("=================== save default cfg, please modify files in {}".format(train_dir))
-    return
+  save_cfgs(train_dir, model_config, train_config, track_config)
 
   g = tf.Graph()
   with g.as_default():

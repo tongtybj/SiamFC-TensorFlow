@@ -45,7 +45,7 @@ if __name__ == '__main__':
                             help='the specific checkpoint for export', default=-1, type=int)
 
     parser.add_argument('--scale', dest='scale', action="store",
-                            help='the number of scale to do tracking', default=1, type=int)
+                            help='the number of scale to do tracking', default=3, type=int)
 
     args, _ = parser.parse_known_args()
 
