@@ -324,6 +324,7 @@ class SiameseTracking():
         dt2 = datetime.datetime.now()
         print("inference du: {}".format(dt2.timestamp() - dt1.timestamp()))
 
+        #raw_output_data = self.interpreter.get_tensor(self.lite_output_details[0]['index'])[:,1:15,1:15,:]
         raw_output_data = self.interpreter.get_tensor(self.lite_output_details[0]['index'])
 
         # print("cross correlation : {}".format(np.squeeze(raw_output_data[int(get_center(self.num_scales))])))
@@ -403,7 +404,16 @@ class SiameseTracking():
     self.current_target_state.scale_idx = best_scale
     self.current_target_state.search_pos = self.search_center + disp_instance_input
 
-    outputs = {'search_image': search_images[best_scale_index], 'response': response, 'current_target_state': self.current_target_state}
+    # normalize reponse
+    res_max = np.max(response)
+    res_min = np.min(response)
+    response = (response - res_min) / (res_max - res_min) * 255
+
+    raw_output_max = np.max(np.squeeze(raw_output_data, -1)[best_scale])
+    raw_output_min = np.min(np.squeeze(raw_output_data, -1)[best_scale])
+    best_raw_output = (np.squeeze(raw_output_data, -1)[best_scale] - raw_output_min) / (raw_output_max - raw_output_min) * 255
+
+    outputs = {'search_image': search_images[best_scale_index], 'response': response, 'current_target_state': self.current_target_state, 'raw_output_data': best_raw_output}
     return outputs
 
 if __name__ == "__main__":
@@ -469,6 +479,7 @@ if __name__ == "__main__":
       if not args.headless:
         cv2.imshow('search_image',search_image)
         cv2.imshow('raw_image', input_image)
+        cv2.imshow('response', outputs['raw_output_data'].astype(np.uint8))
         k = cv2.waitKey(0)
         if k == 27:         # wait for ESC key to exit
           sys.exit()
