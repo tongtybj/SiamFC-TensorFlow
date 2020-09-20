@@ -410,9 +410,9 @@ if __name__ == "__main__":
 
   parser = argparse.ArgumentParser(description='')
   parser.add_argument('--models_dir', dest='models_dir', action="store",
-                      default='Logs/SiamFC/track_model_checkpoints/SiamFC-3s-color-pretrained/models', type=str)
+                      default='Logs/SiamFC/track_model_checkpoints/train/models', type=str)
   parser.add_argument('--config', dest='config_filepath', action="store",
-                      help='the path of tracking config for inference', default='Logs/SiamFC/track_model_checkpoints/SiamFC-3s-color-pretrained', type=str)
+                      help='the path of tracking config for inference', default='Logs/SiamFC/track_model_checkpoints/train', type=str)
 
   parser.add_argument('--images', dest='image_filepath', action="store",
                       help='the path of iamges to do inference', default='assets/drone', type=str)

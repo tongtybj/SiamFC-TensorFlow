@@ -37,11 +37,12 @@ else:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='')
 
-    parser.add_argument('--frozen_graph_model', dest='frozen_graph_model', action="store",
-                            help='the file path of fronze graph model', default='Logs/SiamFC/track_model_checkpoints/SiamFC-3s-color-pretrained/models/whole_model_scale1.pb', type=str)
-
     parser.add_argument('--config', dest='config_filepath', action="store",
-                        help='the path of tracking config for inference', default='Logs/SiamFC/track_model_checkpoints/SiamFC-3s-color-pretrained', type=str)
+                        help='the path of tracking config for inference', default='Logs/SiamFC/track_model_checkpoints/train', type=str)
+
+    parser.add_argument('--frozen_graph_model', dest='frozen_graph_model', action="store",
+                            help='the file path of fronze graph model', default='Logs/SiamFC/track_model_checkpoints/train/models/whole_model_scale1.pb', type=str)
+
 
     args, _ = parser.parse_known_args()
 

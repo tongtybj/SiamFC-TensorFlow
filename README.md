@@ -1,75 +1,104 @@
 # SiamFC-TensorFlow
 A TensorFlow implementation of the SiamFC tracker
 
-## Installation
--  [tensorflow/models/resaerch/slim](https://github.com/google-research/tf-slim) with `pip install -e .` (setup.py), and install [tf-slim](https://github.com/google-research/tf-slim) with `pip install -e .` (setup.py)
-
+## Envrionment
+### From virtualenv
+- python 3.5 with Ubuntu 16.04, and add `unset PYTHONPATH` in /bin/activate
+- tensorflow: `pip install tensorflow-gpu`, with `==1.15.0` for training and with `==2.1.0` for exporting and inference.
+- [tensorflow/models/resaerch/slim](https://github.com/tensorflow/models.git) with `pip install -e .` (setup.py),
+- [tf-slim](https://github.com/google-research/tf-slim) with `pip install -e .` (setup.py)
 - [tflite_runtime](https://www.tensorflow.org/lite/guide/python)(tflite_runtime-2.1.0: compatible for ubuntu16.04, python3.5 + tf2.1.0) instead of `tensorflow.lite`, this is also necessary for delagatation of `libedgetpu.so.1` (tflite-2.1.0 is OK for edgeput)
-
+- [edgeput_compiler](https://coral.ai/docs/edgetpu/compiler/)
 - [edgetpu library](https://coral.ai/docs/accelerator/get-started/#1b-on-mac)
 
+### From Docker (use nvidia-docker2)
+#### training (and exporting whole inference model)
+```
+cd SiamFC-TensorFlow/docker_train
+docker build . --tag siamese-fc-train
+```
+
+#### inference (adn separate inference model)
+```
+cd SiamFC-TensorFlow/docker_inference
+docker build . --tag siamese-fc-inference
+```
 
 ## Training
-```bash
-# 1. Download and unzip the ImageNet VID 2015 dataset (~86GB)
-# Now, we assume it is unzipped in /path/to/ILSVRC2015
 
-DATASET=/path/to/ILSVRC2015
-cd SiamFC-TensorFlow
-ln -s $DATASET data/ILSVRC2015
+### Version of Tensorflow:
 
-# 2. Prepare training data
-# If you have followed the data preparation procedures in 
-# the MatConvNet implementation, simply create a soft link 
-# pointing to the curated dataset:
-#       ln -s $CURATED_DATASET data/ILSVRC2015-VID-Curation
-# Otherwise, create it from scratch by
+Please use Tensorflow with version 1.x.x (e.g., 1.15.0), since there is no tensorflow.contrib in version 2.x.x, which is necessary for optimize_loss, mobilenet (models/research/slim/nets).
 
-python scripts/preprocess_VID_data.py
+### Dataset: ImageNet VID 2015 (need more than 200 GB space for orignal dataset and curation dataset, meaninig double)
 
-# 3. Split train/val dataset and store corresponding image paths
+download from http://bvisionweb1.cs.unc.edu/ilsvrc2015/ILSVRC2015_VID.tar.gz (86GB), and unzip (if possible, extract under `$HOME`/)
 
-python scripts/build_VID2015_imdb.py
+#### start a  docker
+     ```
+     mkdir -p ~/SiamFC-TensorFlow/data
+     ~/SiamFC-TensorFlow/docker_train/run.bash 
+     ```
+     **note**: `run.bash` has a arguments to designate the path to `ILSVRC2015`, and default value is `~/ILSVRC2015`
 
-# 3. Start training
-# please add options in train.py based on sacred rules
-# You can get quite good results after ~70k iterations.
+#### with virtual_env:
+     ```
+     ln -s /path/to/ILSVRC2015 ~/ILSVRC2015 # for preprocess_VID_data.py
+     ```
+
+### Prepare for the dataset
+```
+python scripts/preprocess_VID_data.py # create images per tracking id
+python scripts/build_VID2015_imdb.py # Split train/val dataset and store corresponding image paths
+```
+**note**: `preprocess_VID_data.py` has a argument to designate the path of `ILSVRC2015`, and default value is `~/ILSVRC2015`
+
+###  Start training
+```
 python experiments/train.py
+```
+Please add options in train.py based on sacred rules
+You can get quite good results after ~70k iterations.
 
-# 4. View the training progress in TensorBoard
-# Open a new terminal session and cd to SiamFC-TensorFlow, then
+### View the training progress in TensorBoard
+```
 tensorboard --logdir=Logs/SiamFC/track_model_checkpoints/train/
 ```
 
 ## Export Inference  Model
 
+### Version of Tensorflow:
+
+
 ### Export whole model frozen graph
 ```
 $ python scripts/export/export_whole_model_frozen_graph.py
 ```
-**note**: `--checkpoint_dir=Logs/SiamFC/track_model_checkpoints/train` for designating the training directory.
+**note1**: `--checkpoint_dir=Logs/SiamFC/track_model_checkpoints/train` for designating the training directory.
+**note2**: need tf-1.15.0, since tensorflow.contrib is not supported in tf-2.1.0
+**note3**: in docker mode, please use `siamese-fc-train`
 
 ### Export common tflite model and a fully quantized tflite model
 ```
 $ python scripts/export/export_whole_model_tflite_model.py
 ```
 **note1**: please use `--frozen_graph_model` to designate a proper *.pb file.
-**note2**: need tf-2.1.0, since version < 2.1.0 does no support the quantization of SPLIT
-```
-  $ pip install pip install tensorflow-gpu==2.1.0
-  $ python scripts/export_siamese_fc_model.py
-```
 
-**depreacated**: you have to also install [tf-slim](converted_model_full_quant.tflite)
+**note2**: in vritual-env model, need tf-2.1.0, since version < 2.1.0 does no support the quantization of SPLIT. `pip install tensorflow-gpu==2.1.0` to witch the version, 
+
+**note3**: in docker mode, please use `siamese-fc-inference`: `~/SiamFC-TensorFlow/docker_train/run.bash $DATASET`. `$DATASET` is explained before.
 
 ### Export seperate model
 ```
-$ python scripts/export/export_separate_model_tflite_mode.py
+$ python scripts/export/export_separate_model_tflite_model.py
 ```
-**note1**: this is based on a frozen graph, option for alexnet: `--frozen_graph_model=/home/chou/SiamFC-TensorFlow/Logs/SiamFC/track_model_checkpoints/train-alexnet-split/models/whole_model_scale1.pb --config_filepath=/home/chou/SiamFC-TensorFlow/Logs/SiamFC/track_model_checkpoints/train-alexnet-split/models`.
+**note1**: this is also based on a frozen graph, exmaple for alexnet: `--frozen_graph_model=/home/chou/SiamFC-TensorFlow/Logs/SiamFC/track_model_checkpoints/train-alexnet-split/models/whole_model_scale1.pb --config_filepath=/home/chou/SiamFC-TensorFlow/Logs/SiamFC/track_model_checkpoints/train-alexnet-split/models`.
 
-**note2**: compile to edgetpu compatible tflite mode: `edgetpu_compiler search_image_feature_extractor_full_quant_scale1.tflite`
 
+### Compile to edgetpu compatible tflite mode
+```
+$ edgetpu_compiler search_image_feature_extractor_full_quant_scale1.tflite
+```
 
 ## Tracking
 

@@ -21,6 +21,12 @@ from datetime import datetime
 import numpy as np
 import tensorflow
 import tensorflow.compat.v1 as tf
+
+TF_MAJOR_VERSION = [ int(num) for num in tf.__version__.split('.')][0]
+if TF_MAJOR_VERSION == 2:
+  raise NameError('Please use tensorflow with version 1.x.x (e.g., 1.15.0), since there is no tensorflow.contrib in version 2.x.x, which is necessary for optimize_loss, mobilenet (models/research/slim/nets)')
+
+
 from sacred import Experiment
 from sacred.observers import FileStorageObserver
 
@@ -30,11 +36,6 @@ from utils.misc_utils import auto_select_gpu, mkdir_p, have_cfgs, save_cfgs, loa
 
 ex = Experiment(configuration.RUN_NAME)
 ex.observers.append(FileStorageObserver.create(osp.join(configuration.LOG_DIR, 'sacred')))
-
-
-### bakui memo:
-### 1. learning rate algorithm
-### 2. optimizer algorithm
 
 @ex.config
 def configurations():

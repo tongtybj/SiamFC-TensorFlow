@@ -20,10 +20,11 @@ from configuration import LOG_DIR
 from train_siamese_model import ex
 
 if __name__ == '__main__':
-  RUN_NAME = 'train'
+  RUN_NAME = 'train_batch32'
   ex.run(config_updates={'train_config': {'train_dir': osp.join(LOG_DIR, 'track_model_checkpoints', RUN_NAME), },
                          'track_config': {'log_dir': osp.join(LOG_DIR, 'track_model_inference', RUN_NAME), },
-                         'model_config': {'embed_config': {'feature_extractor': 'mobilenet_v1', }, },
+                         'model_config': {'embed_config': {'feature_extractor': 'alexnet', }, },
+                         'train_config': {'train_data_config': {'batch_size': 32, }, },
                          },
          options={'--name': RUN_NAME,
                   '--force': True,

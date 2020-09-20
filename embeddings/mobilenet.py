@@ -4,15 +4,14 @@ from __future__ import print_function
 
 import logging
 
-#import tensorflow as tf
 import tensorflow.compat.v1 as tf
 
 TF_MAJOR_VERSION = [ int(num) for num in tf.__version__.split('.')][0]
-if TF_MAJOR_VERSION == 1:
-    import tensorflow.contrib.slim as slim
-    from nets import mobilenet_v1
-else:
-    import tf_slim as slim
+if TF_MAJOR_VERSION == 2:
+  raise NameError('Please use tensorflow with version 1.x.x (e.g., 1.15.0), since there is no tensorflow.contrib in version 2.x.x, which is necessary for mobilenet (models/research/slim/nets)')
+
+import tensorflow.contrib.slim as slim
+from nets import mobilenet_v1
 
 '''
 CONV_DEFS = [

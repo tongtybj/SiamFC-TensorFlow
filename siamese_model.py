@@ -16,7 +16,6 @@ import functools
 import tensorflow.compat.v1 as tf
 
 from embeddings.convolutional_alexnet import convolutional_alexnet_arg_scope, convolutional_alexnet
-import embeddings.mobilenet as mobilenet
 from metrics.track_metrics import center_dist_error, center_score_error
 from utils.train_utils import construct_gt_score_maps, load_mat_model
 from siamese_datasets.dataloader import DataLoader
@@ -25,6 +24,7 @@ TF_MAJOR_VERSION = [ int(num) for num in tf.__version__.split('.')][0]
 if TF_MAJOR_VERSION == 1:
     import tensorflow.contrib.slim as slim
     from tensorflow.contrib import quantize as contrib_quantize
+    import embeddings.mobilenet as mobilenet
     from nets import mobilenet_v1
 else:
     import tf_slim as slim
@@ -114,6 +114,7 @@ class SiameseModel:
     return feature_extractors[feature_extactor](reuse)
 
   def build_image_embeddings_alexnet(self, reuse=False):
+
     model_config = self.model_config['embed_config']
     alexnet_config = self.model_config['alexnet']
     arg_scope = convolutional_alexnet_arg_scope(model_config,
@@ -132,6 +133,10 @@ class SiameseModel:
   def build_image_embeddings_mobilenet_v1(self, reuse=False):
     """Builds the image model subgraph and generates image embeddings based on mobilenent
     """
+
+    if TF_MAJOR_VERSION == 2:
+      raise NameError('Please use tensorflow with version 1.x.x (e.g., 1.15.0), since there is no tensorflow.contrib in version 2.x.x, which is necessary for mobilenet (models/research/slim/nets)')
+
     model_config = self.model_config['embed_config']
     mobilenent_config = self.model_config['mobilenet_v1']
 

@@ -15,13 +15,14 @@ import sys
 import xml.etree.ElementTree as ET
 from glob import glob
 from multiprocessing.pool import ThreadPool
+import argparse
 
 import cv2
 from cv2 import imread, imwrite
 
 CURRENT_DIR = osp.dirname(__file__)
-ROOT_DIR = osp.join(CURRENT_DIR, '..')
-sys.path.append(ROOT_DIR)
+#ROOT_DIR = osp.join(CURRENT_DIR, '..')
+#sys.path.append(ROOT_DIR)
 
 from utils.infer_utils import get_crops, Rectangle, convert_bbox_format
 from utils.misc_utils import mkdir_p
@@ -93,15 +94,19 @@ def process_split(root_dir, save_dir, split, subdir='', ):
 
 
 if __name__ == '__main__':
-  vid_dir = osp.join(ROOT_DIR, 'data/ILSVRC2015')
+  parser = argparse.ArgumentParser(description='')
+  parser.add_argument('--vid_dir', dest='vid_dir', action="store",
+                      help='the directory path of ILSVRC2015', default=os.environ["HOME"] + '/ILSVRC2015', type=str)
 
+  args, _ = parser.parse_known_args()
+  
   # Or, you could save the actual curated data to a disk with sufficient space
   # then create a soft link in `data/ILSVRC2015-VID-Curation`
   save_dir = 'data/ILSVRC2015-VID-Curation'
 
   pool = ThreadPool(processes=5)
 
-  one_work = lambda a, b: process_split(vid_dir, save_dir, a, b)
+  one_work = lambda a, b: process_split(args.vid_dir, save_dir, a, b)
 
   results = []
   results.append(pool.apply_async(one_work, ['val', '']))
